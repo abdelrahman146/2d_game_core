@@ -1,0 +1,45 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Godot: Validate Project",
+            "type": "shell",
+            "command": "/opt/homebrew/bin/godot",
+            "args": [
+                "--headless",
+                "--editor",
+                "--path",
+                "${workspaceFolder}",
+                "--quit"
+            ],
+            "problemMatcher": []
+        },
+        {
+            "label": "Godot: Run Project Headless",
+            "type": "shell",
+            "command": "/opt/homebrew/bin/godot",
+            "args": [
+                "--headless",
+                "--path",
+                "${workspaceFolder}"
+            ],
+            "isBackground": true,
+            "problemMatcher": []
+        },
+        {
+            "label": "Godot: Run GUT Tests",
+            "type": "shell",
+            "command": "/opt/homebrew/bin/godot",
+            "args": [
+                "--headless",
+                "--path",
+                "${workspaceFolder}",
+                "-s",
+                "res://addons/gut/gut_cmdln.gd",
+                "-gconfig=res://.gutconfig.json",
+                "-gexit"
+            ],
+            "problemMatcher": []
+        }
+    ]
+}

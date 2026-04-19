@@ -1,0 +1,17 @@
+# macOS
+.DS_Store
+
+# Godot editor/cache state
+.godot/
+*.import
+
+# VS Code local state
+.vscode/*.log
+
+# GUT editor/runtime artifacts
+gut_editor_config.json
+gut_editor_shortcuts.cfg
+gut_editor_run_externally.cfg
+.gut_editor_config.json
+.gut_editor_shortcuts.cfg
+
