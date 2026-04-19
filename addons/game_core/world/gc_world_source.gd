@@ -1,15 +1,14 @@
 extends Resource
 class_name GCWorldSource
+## Base contract for world loading strategies.
+## Extend this for level-based, room-based, procedural, or single-scene worlds.
 
-const GCGameContext = preload("res://addons/game_core/core/gc_game_context.gd")
-const GCWorldController = preload("res://addons/game_core/world/gc_world_controller.gd")
 
-
-func open_world(_context: GCGameContext, _controller: GCWorldController, _payload: Dictionary = {}) -> void:
+func open(_context: GCGameContext, _controller: GCWorldController, _payload: Dictionary = {}) -> void:
 	pass
 
 
-func close_world(_context: GCGameContext, _controller: GCWorldController) -> void:
+func close(_context: GCGameContext, _controller: GCWorldController) -> void:
 	pass
 
 

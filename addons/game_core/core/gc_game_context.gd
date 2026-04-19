@@ -1,59 +1,61 @@
 extends RefCounted
 class_name GCGameContext
+## Shared game state container accessible from the bootstrap autoload.
+## Holds runtime state, player data, and metadata.
 
-const GCServiceRegistry = preload("res://addons/game_core/core/gc_service_registry.gd")
+signal state_changed(key: StringName, value: Variant)
+signal player_data_changed(key: StringName, value: Variant)
 
-const SERIALIZATION_VERSION := 1
-
-var services: GCServiceRegistry
-var shared_state: Dictionary = {}
-var runtime_state: Dictionary = {}
+var state: Dictionary = {}
+var player_data: Dictionary = {}
 var metadata: Dictionary = {}
 
 
-func _init() -> void:
-	services = GCServiceRegistry.new()
-
-
 func set_value(key: StringName, value: Variant) -> void:
-	runtime_state[key] = value
+	state[key] = value
+	state_changed.emit(key, value)
 
 
-func get_value(key: StringName, default_value: Variant = null) -> Variant:
-	return runtime_state.get(key, default_value)
+func get_value(key: StringName, default: Variant = null) -> Variant:
+	return state.get(key, default)
 
 
-func set_shared_value(key: StringName, value: Variant) -> void:
-	shared_state[key] = value
+func has_value(key: StringName) -> bool:
+	return state.has(key)
 
 
-func get_shared_value(key: StringName, default_value: Variant = null) -> Variant:
-	return shared_state.get(key, default_value)
+func clear_value(key: StringName) -> void:
+	state.erase(key)
+
+
+func set_player_value(key: StringName, value: Variant) -> void:
+	player_data[key] = value
+	player_data_changed.emit(key, value)
+
+
+func get_player_value(key: StringName, default: Variant = null) -> Variant:
+	return player_data.get(key, default)
+
+
+func has_player_value(key: StringName) -> bool:
+	return player_data.has(key)
+
+
+func clear() -> void:
+	state.clear()
+	player_data.clear()
+	metadata.clear()
 
 
 func serialize() -> Dictionary:
 	return {
-		&"version": SERIALIZATION_VERSION,
-		&"shared_state": shared_state.duplicate(true),
-		&"runtime_state": runtime_state.duplicate(true),
+		&"state": state.duplicate(true),
+		&"player_data": player_data.duplicate(true),
 		&"metadata": metadata.duplicate(true),
 	}
 
 
-func apply_serialized_data(data: Dictionary) -> void:
-	shared_state = _read_serialized_dictionary(data, &"shared_state")
-	runtime_state = _read_serialized_dictionary(data, &"runtime_state")
-	metadata = _read_serialized_dictionary(data, &"metadata")
-
-
-static func from_serialized_data(data: Dictionary) -> GCGameContext:
-	var context := GCGameContext.new()
-	context.apply_serialized_data(data)
-	return context
-
-
-func _read_serialized_dictionary(data: Dictionary, key: StringName) -> Dictionary:
-	var value: Variant = data.get(key, {})
-	if value is Dictionary:
-		return (value as Dictionary).duplicate(true)
-	return {}
+func deserialize(data: Dictionary) -> void:
+	state = data.get(&"state", {}).duplicate(true)
+	player_data = data.get(&"player_data", {}).duplicate(true)
+	metadata = data.get(&"metadata", {}).duplicate(true)

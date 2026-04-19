@@ -1,151 +1,124 @@
-extends Node
+extends CanvasLayer
 class_name GCScreenRouter
+## Manages screen navigation with stack support and animated transitions.
+## Add as a child of GCBootstrap or any node. Configure screen definitions in inspector.
 
-const GCGameContext = preload("res://addons/game_core/core/gc_game_context.gd")
-const GCScreenBase = preload("res://addons/game_core/screens/gc_screen_base.gd")
-const GCScreenDefinition = preload("res://addons/game_core/screens/gc_screen_definition.gd")
+const _ScreenDef = preload("res://addons/game_core/screens/gc_screen_def.gd")
+const _Screen = preload("res://addons/game_core/screens/gc_screen.gd")
+const _Transition = preload("res://addons/game_core/screens/transitions/gc_transition.gd")
 
-signal transitioned(previous_screen: StringName, next_screen: StringName)
-signal history_changed(history_depth: int)
+signal screen_changed(screen_id: StringName)
 
-@export var definitions: Array[GCScreenDefinition] = []
+@export var definitions: Array[_ScreenDef] = []
+@export var default_transition: _Transition
 
 var context: GCGameContext
-var current_screen: GCScreenBase
-var current_screen_id: StringName
-var _definitions_by_id: Dictionary = {}
-var _persistent_instances: Dictionary = {}
-var _history_stack: Array[StringName] = []
+var current_screen: _Screen
+var current_id: StringName
+
+var _stack: Array[Dictionary] = []  # [{id, payload}]
+var _persistent_cache: Dictionary = {}  # id -> GCScreen
+var _is_transitioning := false
 
 
 func configure(game_context: GCGameContext) -> void:
 	context = game_context
-	_rebuild_definition_cache()
 
 
 func go_to(screen_id: StringName, payload: Dictionary = {}) -> void:
-	if context == null:
-		push_error("GCScreenRouter must be configured before go_to is called.")
+	if _is_transitioning:
 		return
-	if not _definitions_by_id.has(screen_id):
-		push_error("Unknown screen id '%s'." % screen_id)
-		return
-	var definition: GCScreenDefinition = _definitions_by_id[screen_id]
-	var next_screen := _get_or_create_screen(definition)
-	if next_screen == null:
-		return
-	var transition_resource := definition.transition
-	if transition_resource == null:
-		complete_transition(current_screen, next_screen, payload)
-		return
-	transition_resource.begin(self, current_screen, next_screen, payload)
+	_stack.clear()
+	_navigate_to(screen_id, payload)
 
 
 func push(screen_id: StringName, payload: Dictionary = {}) -> void:
-	if not current_screen_id.is_empty():
-		_history_stack.append(current_screen_id)
-		history_changed.emit(_history_stack.size())
-	go_to(screen_id, payload)
-
-
-func pop(payload: Dictionary = {}) -> void:
-	if not can_pop():
-		push_warning("GCScreenRouter.pop called with an empty history stack.")
+	if _is_transitioning:
 		return
-	var previous_screen_id := _history_stack.pop_back()
-	history_changed.emit(_history_stack.size())
-	go_to(previous_screen_id, payload)
-
-
-func can_pop() -> bool:
-	return not _history_stack.is_empty()
-
-
-func clear_history() -> void:
-	if _history_stack.is_empty():
-		return
-	_history_stack.clear()
-	history_changed.emit(0)
-
-
-func has_definition(screen_id: StringName) -> bool:
-	return _definitions_by_id.has(screen_id)
-
-
-func get_definition(screen_id: StringName) -> GCScreenDefinition:
-	return _definitions_by_id.get(screen_id) as GCScreenDefinition
-
-
-func complete_transition(from_screen: GCScreenBase, to_screen: GCScreenBase, payload: Dictionary = {}) -> void:
-	var previous_id := current_screen_id
-	if from_screen != null:
-		_release_screen(from_screen, true, not _is_persistent_screen(from_screen.screen_definition))
-	current_screen = to_screen
-	current_screen_id = to_screen.screen_definition.id
-	if current_screen.get_parent() != self:
-		add_child(current_screen)
-	if not current_screen.transition_requested.is_connected(_on_screen_transition_requested):
-		current_screen.transition_requested.connect(_on_screen_transition_requested)
-	current_screen.enter(payload)
-	transitioned.emit(previous_id, current_screen_id)
-
-
-func _get_or_create_screen(definition: GCScreenDefinition) -> GCScreenBase:
-	if definition.is_persistent and _persistent_instances.has(definition.id):
-		return _persistent_instances[definition.id]
-	var screen := definition.instantiate_screen(context)
-	if screen == null:
-		return null
-	if definition.is_persistent:
-		_persistent_instances[definition.id] = screen
-	return screen
-
-
-func _rebuild_definition_cache() -> void:
-	_definitions_by_id.clear()
-	for definition in definitions:
-		if definition == null:
-			push_warning("Skipping null GCScreenDefinition entry.")
-			continue
-		if not definition.is_valid_definition():
-			continue
-		if _definitions_by_id.has(definition.id):
-			push_warning("Duplicate GCScreenDefinition id '%s'. Keeping the first definition." % definition.id)
-			continue
-		_definitions_by_id[definition.id] = definition
-
-
-func reset_router() -> void:
 	if current_screen != null:
-		_release_screen(current_screen, true, true)
-	for screen in _persistent_instances.values():
-		var cached_screen := screen as GCScreenBase
-		if cached_screen == null or cached_screen == current_screen:
-			continue
-		_release_screen(cached_screen, false, true)
-	_persistent_instances.clear()
-	clear_history()
-	current_screen = null
-	current_screen_id = StringName()
-	context = null
+		_stack.append({&"id": current_id, &"payload": {}})
+		current_screen.pause()
+	_navigate_to(screen_id, payload)
 
 
-func _is_persistent_screen(definition: GCScreenDefinition) -> bool:
-	return definition != null and definition.is_persistent
-
-
-func _on_screen_transition_requested(screen_id: StringName, payload: Dictionary = {}) -> void:
-	go_to(screen_id, payload)
-
-
-func _release_screen(screen: GCScreenBase, should_exit: bool, should_free: bool) -> void:
-	if screen == null:
+func back(payload: Dictionary = {}) -> void:
+	if _is_transitioning:
 		return
-	if screen.transition_requested.is_connected(_on_screen_transition_requested):
-		screen.transition_requested.disconnect(_on_screen_transition_requested)
-	if should_exit:
-		screen.exit()
-	if screen.get_parent() == self:
-		remove_child(screen)
-	if should_free:
-		screen.queue_free()
+	if _stack.is_empty():
+		return
+	var prev: Dictionary = _stack.pop_back()
+	_navigate_to(prev.id, payload if not payload.is_empty() else prev.get(&"payload", {}))
+
+
+func can_go_back() -> bool:
+	return not _stack.is_empty()
+
+
+func _navigate_to(screen_id: StringName, payload: Dictionary) -> void:
+	var def: _ScreenDef = _find_def(screen_id)
+	if def == null:
+		push_error("GCScreenRouter: No screen defined for id '%s'." % screen_id)
+		return
+
+	var transition: _Transition = def.transition if def.transition else default_transition
+	_is_transitioning = true
+
+	if transition and current_screen:
+		transition.play_exit(self)
+		await transition.finished
+	
+	_remove_current()
+
+	var next_screen: _Screen = _get_or_create_screen(def)
+	if next_screen == null:
+		_is_transitioning = false
+		return
+
+	current_screen = next_screen
+	current_id = screen_id
+	add_child(current_screen)
+	current_screen.setup(context)
+	current_screen.enter(payload)
+
+	if transition:
+		transition.play_enter(self)
+		await transition.finished
+
+	_is_transitioning = false
+	screen_changed.emit(screen_id)
+
+
+func _remove_current() -> void:
+	if current_screen == null:
+		return
+	current_screen.exit()
+	var def: _ScreenDef = _find_def(current_id)
+	if def and def.is_persistent:
+		remove_child(current_screen)
+	else:
+		current_screen.queue_free()
+	current_screen = null
+	current_id = &""
+
+
+func _get_or_create_screen(def: _ScreenDef) -> _Screen:
+	if def.is_persistent and _persistent_cache.has(def.id):
+		return _persistent_cache[def.id]
+	if def.scene == null:
+		push_error("GCScreenRouter: Screen '%s' has no scene assigned." % def.id)
+		return null
+	var instance: Node = def.scene.instantiate()
+	if instance is _Screen:
+		if def.is_persistent:
+			_persistent_cache[def.id] = instance
+		return instance as _Screen
+	push_error("GCScreenRouter: Scene root for '%s' must extend GCScreen." % def.id)
+	instance.queue_free()
+	return null
+
+
+func _find_def(screen_id: StringName) -> _ScreenDef:
+	for def in definitions:
+		if def and def.id == screen_id:
+			return def
+	return null

@@ -6,6 +6,11 @@
   "prefix": "test_",
   "suffix": ".gd",
   "should_exit": true,
+  "log_level": 1,
+  "disable_colors": true,
+  "paint_after": 0.1,
+  "opacity": 0,
+  "font_size": 16,
   "failure_error_types": [
     "engine",
     "gut",
