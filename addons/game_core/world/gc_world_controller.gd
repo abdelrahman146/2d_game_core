@@ -6,11 +6,13 @@ const GCWorldSource = preload("res://addons/game_core/world/gc_world_source.gd")
 
 signal world_opened(payload: Dictionary)
 signal world_closed
+signal world_root_changed(world_root: Node)
 
 @export var source: GCWorldSource
 
 var context: GCGameContext
 var is_open := false
+var world_root: Node
 
 
 func configure(game_context: GCGameContext) -> void:
@@ -33,8 +35,37 @@ func open_world(payload: Dictionary = {}) -> void:
 
 
 func close_world() -> void:
-	if not is_open or source == null:
+	if not is_open:
 		return
-	source.close_world(context, self)
+	if source != null:
+		source.close_world(context, self)
+	clear_world_root()
 	is_open = false
 	world_closed.emit()
+
+
+func set_world_root(next_world_root: Node) -> void:
+	if world_root == next_world_root:
+		if world_root != null and world_root.get_parent() != self:
+			add_child(world_root)
+		return
+	clear_world_root()
+	world_root = next_world_root
+	if world_root != null and world_root.get_parent() != self:
+		add_child(world_root)
+	world_root_changed.emit(world_root)
+
+
+func get_world_root() -> Node:
+	return world_root
+
+
+func clear_world_root() -> void:
+	if world_root == null:
+		return
+	if world_root.get_parent() == self:
+		remove_child(world_root)
+	if is_instance_valid(world_root) and not world_root.is_queued_for_deletion():
+		world_root.queue_free()
+	world_root = null
+	world_root_changed.emit(null)

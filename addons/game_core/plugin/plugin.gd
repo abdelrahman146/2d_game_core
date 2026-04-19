@@ -35,6 +35,11 @@ const CUSTOM_TYPES := [
 		"script": "res://addons/game_core/entities/gc_entity_component.gd",
 	},
 	{
+		"name": "GCTagQuery",
+		"base": "Resource",
+		"script": "res://addons/game_core/entities/gc_tag_query.gd",
+	},
+	{
 		"name": "GCInteraction",
 		"base": "Resource",
 		"script": "res://addons/game_core/interactions/gc_interaction.gd",
@@ -53,6 +58,16 @@ const CUSTOM_TYPES := [
 		"name": "GCWorldSource",
 		"base": "Resource",
 		"script": "res://addons/game_core/world/gc_world_source.gd",
+	},
+	{
+		"name": "GCFixedSceneWorldSource",
+		"base": "Resource",
+		"script": "res://addons/game_core/world/gc_fixed_scene_world_source.gd",
+	},
+	{
+		"name": "GCChunkSequenceWorldSource",
+		"base": "Resource",
+		"script": "res://addons/game_core/world/gc_chunk_sequence_world_source.gd",
 	},
 ]
 

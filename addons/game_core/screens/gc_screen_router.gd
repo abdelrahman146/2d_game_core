@@ -6,6 +6,7 @@ const GCScreenBase = preload("res://addons/game_core/screens/gc_screen_base.gd")
 const GCScreenDefinition = preload("res://addons/game_core/screens/gc_screen_definition.gd")
 
 signal transitioned(previous_screen: StringName, next_screen: StringName)
+signal history_changed(history_depth: int)
 
 @export var definitions: Array[GCScreenDefinition] = []
 
@@ -14,6 +15,7 @@ var current_screen: GCScreenBase
 var current_screen_id: StringName
 var _definitions_by_id: Dictionary = {}
 var _persistent_instances: Dictionary = {}
+var _history_stack: Array[StringName] = []
 
 
 func configure(game_context: GCGameContext) -> void:
@@ -37,6 +39,41 @@ func go_to(screen_id: StringName, payload: Dictionary = {}) -> void:
 		complete_transition(current_screen, next_screen, payload)
 		return
 	transition_resource.begin(self, current_screen, next_screen, payload)
+
+
+func push(screen_id: StringName, payload: Dictionary = {}) -> void:
+	if not current_screen_id.is_empty():
+		_history_stack.append(current_screen_id)
+		history_changed.emit(_history_stack.size())
+	go_to(screen_id, payload)
+
+
+func pop(payload: Dictionary = {}) -> void:
+	if not can_pop():
+		push_warning("GCScreenRouter.pop called with an empty history stack.")
+		return
+	var previous_screen_id := _history_stack.pop_back()
+	history_changed.emit(_history_stack.size())
+	go_to(previous_screen_id, payload)
+
+
+func can_pop() -> bool:
+	return not _history_stack.is_empty()
+
+
+func clear_history() -> void:
+	if _history_stack.is_empty():
+		return
+	_history_stack.clear()
+	history_changed.emit(0)
+
+
+func has_definition(screen_id: StringName) -> bool:
+	return _definitions_by_id.has(screen_id)
+
+
+func get_definition(screen_id: StringName) -> GCScreenDefinition:
+	return _definitions_by_id.get(screen_id) as GCScreenDefinition
 
 
 func complete_transition(from_screen: GCScreenBase, to_screen: GCScreenBase, payload: Dictionary = {}) -> void:
@@ -67,7 +104,13 @@ func _get_or_create_screen(definition: GCScreenDefinition) -> GCScreenBase:
 func _rebuild_definition_cache() -> void:
 	_definitions_by_id.clear()
 	for definition in definitions:
-		if definition == null or definition.id.is_empty():
+		if definition == null:
+			push_warning("Skipping null GCScreenDefinition entry.")
+			continue
+		if not definition.is_valid_definition():
+			continue
+		if _definitions_by_id.has(definition.id):
+			push_warning("Duplicate GCScreenDefinition id '%s'. Keeping the first definition." % definition.id)
 			continue
 		_definitions_by_id[definition.id] = definition
 
@@ -81,6 +124,7 @@ func reset_router() -> void:
 			continue
 		_release_screen(cached_screen, false, true)
 	_persistent_instances.clear()
+	clear_history()
 	current_screen = null
 	current_screen_id = StringName()
 	context = null
