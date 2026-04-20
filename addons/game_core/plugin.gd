@@ -42,6 +42,7 @@ const CUSTOM_TYPES := [
 	# World
 	{&"name": "GCWorldController", &"base": "Node", &"script": "res://addons/game_core/world/gc_world_controller.gd"},
 	{&"name": "GCCamera2D", &"base": "Camera2D", &"script": "res://addons/game_core/world/gc_camera.gd"},
+	{&"name": "GCScrollDriver", &"base": "Node", &"script": "res://addons/game_core/world/gc_scroll_driver.gd"},
 ]
 
 const CUSTOM_RESOURCES := [
@@ -53,9 +54,12 @@ const CUSTOM_RESOURCES := [
 	{&"name": "GCSingleSceneSource", &"base": "Resource", &"script": "res://addons/game_core/world/gc_single_scene_source.gd"},
 	{&"name": "GCLevelSource", &"base": "Resource", &"script": "res://addons/game_core/world/gc_level_source.gd"},
 	{&"name": "GCChunkSource", &"base": "Resource", &"script": "res://addons/game_core/world/gc_chunk_source.gd"},
+	{&"name": "GCStreamChunkSource", &"base": "Resource", &"script": "res://addons/game_core/world/gc_stream_chunk_source.gd"},
+	{&"name": "GCChunkSelector", &"base": "Resource", &"script": "res://addons/game_core/world/gc_chunk_selector.gd"},
 	{&"name": "GCStatsData", &"base": "Resource", &"script": "res://addons/game_core/resources/gc_stats_data.gd"},
 	{&"name": "GCLootTable", &"base": "Resource", &"script": "res://addons/game_core/resources/gc_loot_table.gd"},
 	{&"name": "GCLevelData", &"base": "Resource", &"script": "res://addons/game_core/resources/gc_level_data.gd"},
+	{&"name": "GCChunkData", &"base": "Resource", &"script": "res://addons/game_core/resources/gc_chunk_data.gd"},
 ]
 
 
