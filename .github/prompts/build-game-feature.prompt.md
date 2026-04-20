@@ -28,7 +28,10 @@ Read the user's feature description carefully. Before doing anything else:
   - Visual/animation expectations
   - Player input scheme
   - Whether this is a single entity, a world setup, or a full screen flow
-- Do NOT proceed until you have enough clarity to map every mechanic to concrete implementation steps.
+- Also collect (or derive) two slugs that will be used to persist the final guide:
+  - **game-slug** — a short kebab-case identifier for the game (e.g. `space-blaster`, `dungeon-run`). If a `docs/games/` subfolder already exists for this game, reuse that slug.
+  - **feature-slug** — a short kebab-case name for the feature (e.g. `homing-enemy`, `save-system`, `boss-fight`).
+- Do NOT proceed until you have enough clarity to map every mechanic to concrete implementation steps and you have confirmed the two slugs with the user.
 
 ---
 
@@ -232,6 +235,21 @@ Suggest how to test:
 - Place the scene in a test level
 - Expected behavior when running
 - Common issues and fixes
+
+---
+
+## Phase 6 — Persist the guide
+
+After the integration guide is complete and any addon changes have passed validation:
+
+1. Assemble the full guide into a single Markdown document. The document should include:
+   - A title and short summary of the feature.
+   - The gap analysis table from Phase 3.
+   - The complete integration guide from Phase 5 (scene structure, inspector config, local state flow, etc.).
+   - A list of any addon files that were added or modified in Phase 4.
+2. Write the document to `docs/games/<game-slug>/<feature-slug>.md`, creating the directories if they don't exist.
+3. Validate the Markdown file with linting and fix any warnings before considering it done.
+4. Let the user know where the file was saved so they can reference it later.
 
 ---
 
