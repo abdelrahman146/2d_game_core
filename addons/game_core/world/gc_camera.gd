@@ -12,6 +12,9 @@ enum Mode { FOLLOW, FIXED, ROOM_LOCKED, FREE, RAIL }
 @export var rail_speed := 100.0
 
 var _rail_offset := 0.0
+var _shake_strength := 0.0
+var _shake_duration := 0.0
+var _shake_remaining := 0.0
 
 
 func _physics_process(delta: float) -> void:
@@ -26,6 +29,8 @@ func _physics_process(delta: float) -> void:
 			_do_free(delta)
 		Mode.RAIL:
 			_do_rail(delta)
+
+	_process_shake(delta)
 
 
 func set_follow_target(target: Node2D) -> void:
@@ -64,3 +69,27 @@ func _do_rail(delta: float) -> void:
 	var length := rail_path.curve.get_baked_length()
 	_rail_offset = clampf(_rail_offset, 0.0, length)
 	global_position = rail_path.curve.sample_baked(_rail_offset)
+
+
+## Trigger a screen shake. Stacks by taking the greater strength.
+func shake(strength: float, duration: float) -> void:
+	_shake_strength = maxf(_shake_strength, strength)
+	_shake_duration = maxf(duration, 0.01)
+	_shake_remaining = _shake_duration
+
+
+func _process_shake(delta: float) -> void:
+	if _shake_remaining <= 0.0:
+		return
+	_shake_remaining -= delta
+	if _shake_remaining <= 0.0:
+		_shake_remaining = 0.0
+		_shake_strength = 0.0
+		offset = Vector2.ZERO
+		return
+	var decay := _shake_remaining / _shake_duration
+	var current_strength := _shake_strength * decay
+	offset = Vector2(
+		randf_range(-current_strength, current_strength),
+		randf_range(-current_strength, current_strength)
+	)

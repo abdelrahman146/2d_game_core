@@ -6,6 +6,7 @@ const ICON := "res://icon.svg"
 const CUSTOM_TYPES := [
 	# Core
 	{&"name": "GCBootstrap", &"base": "Node", &"script": "res://addons/game_core/core/gc_bootstrap.gd"},
+	{&"name": "GCHitStop", &"base": "Node", &"script": "res://addons/game_core/core/gc_hit_stop.gd"},
 	# Actors
 	{&"name": "GCCharacterHost2D", &"base": "CharacterBody2D", &"script": "res://addons/game_core/actors/gc_character_host.gd"},
 	{&"name": "GCRigidHost2D", &"base": "RigidBody2D", &"script": "res://addons/game_core/actors/gc_rigid_host.gd"},
@@ -43,6 +44,8 @@ const CUSTOM_TYPES := [
 	{&"name": "GCWorldController", &"base": "Node", &"script": "res://addons/game_core/world/gc_world_controller.gd"},
 	{&"name": "GCCamera2D", &"base": "Camera2D", &"script": "res://addons/game_core/world/gc_camera.gd"},
 	{&"name": "GCScrollDriver", &"base": "Node", &"script": "res://addons/game_core/world/gc_scroll_driver.gd"},
+	# Input
+	{&"name": "GCVirtualJoystick", &"base": "Control", &"script": "res://addons/game_core/input/gc_virtual_joystick.gd"},
 ]
 
 const CUSTOM_RESOURCES := [
