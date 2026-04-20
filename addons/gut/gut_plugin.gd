@@ -13,6 +13,7 @@ var _gut_button = null
 var _gut_window = null
 var _dock_mode = 'none'
 var _gut_dock = null
+var _startup_timer : Timer = null
 
 
 func _init():
@@ -39,8 +40,19 @@ func _enter_tree():
 	# UPDATE:
 	# I added it back in when doing the window stuff.  Starting in a window
 	# made it angry (don't remember how) until I added it back in.
-	await get_tree().create_timer(1).timeout
+	_startup_timer = Timer.new()
+	_startup_timer.one_shot = true
+	_startup_timer.wait_time = 1.0
+	add_child(_startup_timer)
+	_startup_timer.start()
+	await _startup_timer.timeout
+	if(_startup_timer != null):
+		_startup_timer.queue_free()
+		_startup_timer = null
 	# ---
+
+	if(!is_inside_tree() or _bottom_panel == null):
+		return
 
 	_bottom_panel.set_interface(get_editor_interface())
 	_bottom_panel.set_plugin(self)
@@ -85,6 +97,11 @@ func toggle_windowed():
 
 
 func _exit_tree():
+	if(_startup_timer != null):
+		_startup_timer.stop()
+		_startup_timer.queue_free()
+		_startup_timer = null
+
 	remove_tool_menu_item("GUT")
 	_menu_mgr = null
 	GutEditorGlobals.user_prefs.save_it()
