@@ -179,7 +179,9 @@ Validation gates for implementation work:
 
 ## Validation workflow
 
-After meaningful code changes, prefer this validation flow:
+The user sometimes works on this project from a work laptop where Godot cannot be installed. Before running any validation steps that require Godot, check whether it is available (e.g. `which /opt/homebrew/bin/godot` or `command -v godot`). If Godot is not installed, skip the headless editor validation and GUT test runs gracefully — do not treat the missing binary as an error or block the workflow. Still perform any non-Godot checks (static analysis, linting, code review) and note that full validation was skipped due to the missing engine.
+
+When Godot **is** available, prefer this validation flow:
 1. Check for any static errors, warnings, or issues reported by the editor. and fix them.
 2. Run headless editor validation:
    `/opt/homebrew/bin/godot --headless --editor --path ${workspaceFolder} --quit`
@@ -188,6 +190,8 @@ After meaningful code changes, prefer this validation flow:
 4. Only consider the implementation complete if both commands succeed and the GUT suite remains fully passing.
 
 Treat engine errors, `push_error`, and orphan leaks as real failures to fix, not acceptable noise.
+
+When creating or editing Markdown files, validate them with markdown linting and ensure they produce no warnings. Treat linting warnings as errors to fix before considering the file complete.
 
 ## Preferred contribution posture
 

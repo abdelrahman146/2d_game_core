@@ -5,7 +5,7 @@ A reusable Godot 4 addon that gives you ready-made foundations for 2D game devel
 ## What It Provides
 
 | Layer | What You Get |
-|-------|-------------|
+| ------- | ------------- |
 | **Core** | Bootstrap autoload, shared game context, service registry |
 | **Services** | Save/load, audio, input, multiplayer, leaderboard, database, auth |
 | **Screens** | Screen router with stack navigation, transitions (fade, slide, wipe), HUD layer, pause |
@@ -139,6 +139,7 @@ git commit -m "Update game_core to latest"
 ### Getting Started
 
 1. Clone this repository directly (not as a submodule):
+
    ```bash
    git clone https://github.com/YOUR_ORG/2DGameCore.git
    cd 2DGameCore
@@ -147,13 +148,14 @@ git commit -m "Update game_core to latest"
 2. Open the project in Godot 4.6+. The addon and GUT (testing framework) plugins should be enabled automatically.
 
 3. Run the test suite to make sure everything passes:
+
    ```bash
    /opt/homebrew/bin/godot --headless --path . -s res://addons/gut/gut_cmdln.gd -gconfig=res://.gutconfig.json -gexit
    ```
 
 ### Project Structure
 
-```
+```text
 addons/game_core/     ← the addon (this is what consumers mount)
   core/               ← bootstrap, context, service registry
   actors/             ← actor hosts and behavior base
@@ -184,6 +186,7 @@ tests/                ← automated GUT tests
 Tests use [GUT](https://github.com/bitwes/Gut) and live in the `tests/` directory.
 
 Rules:
+
 - Test files must follow the `test_*.gd` naming convention.
 - Helper files must NOT use the `test_` prefix.
 - Write meaningful assertions — no placeholder or smoke-only tests.
@@ -198,24 +201,30 @@ Before submitting changes:
 
 1. Check for static errors in the editor.
 2. Run headless editor validation:
+
    ```bash
    /opt/homebrew/bin/godot --headless --editor --path . --quit
    ```
+
 3. Run the full GUT suite:
+
    ```bash
    /opt/homebrew/bin/godot --headless --path . -s res://addons/gut/gut_cmdln.gd -gconfig=res://.gutconfig.json -gexit
    ```
+
 4. Both must pass with zero failures, zero errors, and zero orphan leaks.
 
 ### What Belongs Here vs. In Your Game
 
 **Keep in the addon:**
+
 - Generic services, behaviors, and resources reusable across multiple games
 - Screen routing contracts and transitions
 - World loading abstractions
 - Actor host infrastructure
 
 **Keep in your game project:**
+
 - Game-specific enemy logic and balance
 - One-off UI flows and menus
 - Genre-specific controller details

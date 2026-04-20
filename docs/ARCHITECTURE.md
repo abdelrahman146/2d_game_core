@@ -18,7 +18,7 @@ A reusable Godot 4 addon that makes 2D game development faster by giving you rea
 ## What The Core Gives You
 
 | Area | What you get | How you use it |
-|------|-------------|----------------|
+| ------ | ------------- | ---------------- |
 | Game State | Shared runtime state, context, flags | Access from anywhere via autoload |
 | Save & Load | Serialization of game state, entities, progress | Call save/load, plug in your storage |
 | Screens & Navigation | Screen routing, stack, animated transitions | Define screens as resources, navigate by id |
@@ -41,7 +41,7 @@ A reusable Godot 4 addon that makes 2D game development faster by giving you rea
 
 The addon is organized into layers. Each layer is independent enough to use alone, but they work together naturally.
 
-```
+```text
 ┌─────────────────────────────────────────────────┐
 │                  Your Game                        │
 │  (scenes, levels, enemies, UI, art, game logic)  │
@@ -74,6 +74,7 @@ The foundation everything else builds on.
 ### Game Bootstrap
 
 A single autoload node that starts the game. It:
+
 - Creates the game context (shared state container).
 - Registers and starts all services.
 - Connects to the screen router.
@@ -84,6 +85,7 @@ You add it once and forget about it.
 ### Game Context
 
 A simple shared state object accessible from anywhere:
+
 - `state`: dictionary of runtime game state (score, difficulty, current level, flags).
 - `player_data`: persistent player information (unlocks, settings, profile).
 - `metadata`: free-form data for custom needs.
@@ -94,6 +96,7 @@ This is your game's memory. Not a dumping ground — just the stuff that needs t
 ### Service Registry
 
 An ordered list of services that start up and shut down cleanly:
+
 - Register services by id.
 - Services start in order, stop in reverse order.
 - Late registration supported (add services after boot).
@@ -108,7 +111,7 @@ Pluggable systems that run in the background. Each service has a simple interfac
 ### Built-in Services
 
 | Service | Purpose |
-|---------|---------|
+| --------- | --------- |
 | **Save/Load** | Serialize and restore game state, entity data, player progress. Pluggable storage backend (local file, cloud, custom). |
 | **Audio** | Play music and SFX by id. Crossfade, layer, volume groups. Bus management. |
 | **Input** | Action-based input queries. Device detection. Rebinding support. |
@@ -147,6 +150,7 @@ Manages which screen is active and how you move between them.
 ### Transitions
 
 A contract plus ready-to-use defaults:
+
 - **Fade** — fade to black and back.
 - **Slide** — slide old screen out, new screen in.
 - **Wipe** — directional wipe.
@@ -157,6 +161,7 @@ Assign a transition per screen or per navigation call.
 ### HUD Layer
 
 A persistent overlay layer that lives above game screens:
+
 - Add any scene as a HUD element.
 - Show/hide elements by id.
 - HUD persists across screen changes unless you remove it.
@@ -177,7 +182,7 @@ A persistent overlay layer that lives above game screens:
 Different strategies for different game types, same interface:
 
 | Strategy | Use Case |
-|----------|----------|
+| ---------- | ---------- |
 | **Single Scene** | Board games, card games, single-screen games. Load one scene, done. |
 | **Level-Based** | Platformers, puzzle games. Load levels by id or sequence. Supports unlock/progression. |
 | **Room-Based** | Metroidvania, dungeon crawlers. Move between connected rooms. |
@@ -191,7 +196,7 @@ You pick a world source, configure it in the inspector, and the core handles lif
 Reusable camera setups you pick from or extend:
 
 | Mode | Description |
-|------|-------------|
+| ------ | ------------- |
 | **Follow** | Follows a target with smoothing. Side-scroll or top-down. |
 | **Fixed** | Locked position. Board games, single-screen. |
 | **Room-Locked** | Snaps to room boundaries. Zelda-style. |
@@ -203,6 +208,7 @@ Camera modes are just resources you assign. Switch at runtime if needed.
 ### View Directions
 
 The core does not assume a specific view direction. Your game defines it:
+
 - Top-down (player moves in all directions, camera looks down).
 - Side-scroll (gravity pulls down, camera follows horizontally).
 - Bottom-up / vertical scroll (camera moves up).
@@ -216,6 +222,7 @@ World sources and camera modes combine to support any of these without core chan
 ## Layer 5: Actor Hosts
 
 These are the base nodes your game objects extend. They give you:
+
 - Automatic lifecycle dispatch to child behavior components.
 - Shared local state dictionary.
 - Helper methods to find sensors, spawn points, and named children.
@@ -225,7 +232,7 @@ These are the base nodes your game objects extend. They give you:
 ### Host Types
 
 | Host | Extends | Use For |
-|------|---------|---------|
+| ------ | --------- | --------- |
 | **GCCharacterHost2D** | CharacterBody2D | Enemies, NPCs, player characters. Anything that moves with `move_and_slide`. |
 | **GCRigidHost2D** | RigidBody2D | Physics objects: crates, balls, ragdolls, throwables. |
 | **GCStaticHost2D** | StaticBody2D | Doors, switches, breakable walls, traps, platforms, interactable props. |
@@ -233,7 +240,7 @@ These are the base nodes your game objects extend. They give you:
 
 ### How A Host Works
 
-```
+```text
 GCCharacterHost2D (your enemy scene root)
 ├── CollisionShape2D          ← normal Godot, set in inspector
 ├── Sprite2D                  ← normal Godot
@@ -274,6 +281,7 @@ Small reusable nodes that give an actor host specific abilities. They are childr
 ### Lifecycle Hooks
 
 Every behavior component can implement:
+
 - `on_host_ready(host)` — called when the host is ready.
 - `on_process(host, delta)` — called every frame.
 - `on_physics(host, delta)` — called every physics frame.
@@ -284,6 +292,7 @@ Every behavior component can implement:
 Behaviors run in tree order (top to bottom in scene tree). If you need a specific order, just reorder the nodes.
 
 If needed, behaviors can declare a `phase` for clarity:
+
 - `sense` — gather information (raycasts, overlaps, distances).
 - `decide` — choose what to do (patrol, chase, idle, attack).
 - `act` — execute the decision (move, shoot, jump).
@@ -311,18 +320,21 @@ These are just Godot resources. Edit them in inspector. Share them across enemie
 A starter set of behaviors that ship with the core. You can use them as-is or as examples for your own.
 
 ### Movement & Patrol
+
 - **GCSimpleMovement** — Applies velocity from local state. Handles gravity toggle.
 - **GCPatrolBehavior** — Patrol between two points or until edge/wall detected. Works on x or y axis.
 - **GCFollowTargetBehavior** — Move toward a target entity or position.
 - **GCWanderBehavior** — Random movement within an area.
 
 ### Detection & Sensing
+
 - **GCDetectTargetBehavior** — Detect a target (player) via area overlap or raycast. Writes target to local state.
 - **GCEdgeSensor** — Detect floor edges ahead. Writes `edge_ahead` to local state.
 - **GCWallSensor** — Detect walls ahead. Writes `wall_ahead` to local state.
 - **GCLineSight** — Raycast-based line of sight check.
 
 ### Combat & Actions
+
 - **GCShootBehavior** — Spawn a projectile on a cooldown. Configurable direction, speed, scene.
 - **GCDropBehavior** — Drop an object (bomb, item) when condition met.
 - **GCDamageBehavior** — Deal damage on overlap or hit.
@@ -330,6 +342,7 @@ A starter set of behaviors that ship with the core. You can use them as-is or as
 - **GCKnockbackBehavior** — Apply knockback force on hit.
 
 ### Interaction & World
+
 - **GCCollectibleBehavior** — Make something collectible. Emits collected signal with reward data.
 - **GCInteractableBehavior** — Respond to player interaction (press button near door/NPC).
 - **GCSpawnerBehavior** — Spawn entities on timer, signal, or condition.
@@ -337,6 +350,7 @@ A starter set of behaviors that ship with the core. You can use them as-is or as
 - **GCAnimationBehavior** — Play animations based on local state changes.
 
 ### Physics & Constraints
+
 - **GCGravityBehavior** — Apply gravity. Toggle for flying.
 - **GCBounceBehavior** — Bounce off surfaces (for RigidBody hosts).
 - **GCPlatformBehavior** — Move a static body on a path (moving platform).
@@ -410,7 +424,7 @@ You write the implementation for your chosen backend. The rest of the game talks
 
 ## Procedural Generation
 
-### How It Works
+### Generation Pipeline
 
 - A **world source** declares how to generate content.
 - The **world controller** manages chunk lifecycle (create, activate, deactivate, free).
@@ -434,7 +448,7 @@ You write the implementation for your chosen backend. The rest of the game talks
 
 ## Folder Structure
 
-```
+```text
 addons/game_core/
 ├── plugin.cfg
 ├── plugin.gd
@@ -596,7 +610,7 @@ GCBootstrap.services.get_service("save").load_game("slot_1")
 ## What Stays Native Godot
 
 | Godot Feature | Status in This Architecture |
-|---------------|----------------------------|
+| --------------- | ---------------------------- |
 | Scene tree | Fully used. Hosts and behaviors are nodes. |
 | Inspector | Primary configuration tool. Exports everywhere. |
 | Signals | Used freely. Behaviors emit signals. Hosts emit signals. |

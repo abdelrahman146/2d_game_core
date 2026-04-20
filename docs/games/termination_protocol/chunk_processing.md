@@ -1,10 +1,10 @@
 # Chunk Processing Guide for Endless Runner
 
-### 1. Create GCChunkData resources for every chunk
+## 1. Create GCChunkData resources for every chunk
 
 For each of your ~50 challenge chunks and ~10 connectors, create a `.tres` resource:
 
-```
+```text
 res://data/chunks/challenge_falling_boxes_01.tres   → GCChunkData
 res://data/chunks/challenge_drones_01.tres          → GCChunkData
 res://data/chunks/connector_bridge_01.tres          → GCChunkData
@@ -14,7 +14,7 @@ res://data/chunks/connector_bridge_01.tres          → GCChunkData
 Inspector config per resource:
 
 | Property | Example (challenge) | Example (connector) |
-|----------|-------------------|-------------------|
+| ---------- | ------------------- | ------------------- |
 | `scene` | your chunk PackedScene | your connector PackedScene |
 | `category` | `&"falling_boxes"` | `&"connector_bridge"` |
 | `difficulty` | `0.3` | `0.0` |
@@ -24,11 +24,11 @@ Inspector config per resource:
 | `connects_from` | `[]` (any predecessor) | `[&"falling_boxes", &"drones"]` |
 | `connects_to` | `[]` | `[&"gates", &"patrol"]` |
 
-### 2. Create your chunk scenes
+## 2. Create your chunk scenes
 
 Each chunk scene is a **Node2D** root containing:
 
-```
+```text
 ChunkRoot (Node2D)
 ├── TileMapLayer          ← platforms, walls (32×32 tiles)
 ├── Hazard1 (GCStaticHost2D / GCAreaHost2D)  ← game-specific hazards
@@ -43,9 +43,9 @@ ChunkRoot (Node2D)
 
 The chunk's **origin is its top edge** (y=0). Content extends downward (positive Y). The `length` in `GCChunkData` should match the total height of the chunk content.
 
-### 3. Scene tree for the game world
+## 3. Scene tree for the game world
 
-```
+```text
 GameWorld (Node2D)
 ├── GCWorldController
 │   └── (ChunkRoot auto-created by GCStreamChunkSource)
@@ -67,13 +67,13 @@ GameWorld (Node2D)
 └── GCCamera2D (mode=FIXED, centered on corridor)
 ```
 
-### 4. Configure GCWorldController
+## 4. Configure GCWorldController
 
 - **Inspector**: Set `source` to a `GCStreamChunkSource` resource
 - The stream chunk source resource exports:
 
 | Property | Value |
-|----------|-------|
+| ---------- | ------- |
 | `chunks` | Array of all your challenge `GCChunkData` resources |
 | `connectors` | Array of all your connector `GCChunkData` resources |
 | `selector` | Your custom `RunnerChunkSelector.tres` (see step 6) |
@@ -82,10 +82,10 @@ GameWorld (Node2D)
 | `lookahead_count` | `3` |
 | `trail_count` | `1` |
 
-### 5. Configure GCScrollDriver
+## 5. Configure GCScrollDriver
 
 | Property | Value |
-|----------|-------|
+| ---------- | ------- |
 | `base_speed` | `80.0` (starting scroll speed) |
 | `acceleration` | `1.5` (speed increase per second) |
 | `max_speed` | `300.0` |
@@ -93,7 +93,7 @@ GameWorld (Node2D)
 | `chunk_source` | Same `GCStreamChunkSource` resource |
 | `viewport_scroll_size` | Your viewport height (e.g., `640.0`) |
 
-### 6. Write your custom chunk selector (game-specific)
+## 6. Write your custom chunk selector (game-specific)
 
 This is the logic that controls chunk variety, difficulty ramp, and anti-repetition. Save at `res://scripts/runner_chunk_selector.gd`:
 
@@ -155,7 +155,7 @@ func _weighted_pick(items: Array, weights: Array[float]) -> Resource:
  return items.back()
 ```
 
-### 7. Write the wall-slide detector (game-specific)
+## 7. Write the wall-slide detector (game-specific)
 
 This behavior detects wall contact and modifies scroll speed. Add as a child of the player host:
 
@@ -203,9 +203,9 @@ func on_physics(host: Node, _delta: float) -> void:
   _driver.apply_speed_modifier(1.0)
 ```
 
-### 8. Player scene setup
+## 8. Player scene setup
 
-```
+```text
 Player (GCCharacterHost2D)
 ├── CollisionShape2D (RectangleShape2D, e.g. 24×28)
 ├── AnimatedSprite2D
@@ -234,7 +234,7 @@ func on_physics(host: Node, _delta: float) -> void:
   host.local_state[&"facing_direction"] = 1 if dir > 0 else -1
 ```
 
-### 9. Game world script (ties it all together)
+## 9. Game world script (ties it all together)
 
 Attach to the GameWorld root node:
 
@@ -254,11 +254,11 @@ func _ready() -> void:
  # Scroll driver auto-finds the chunk root from sibling GCWorldController
 ```
 
-### 10. Chunk archetype examples
+## 10. Chunk archetype examples
 
 **Falling boxes chunk:**
 
-```
+```text
 FallingBoxesChunk (Node2D)
 ├── TileMapLayer              ← side walls only (scrolling walls)
 └── BoxSpawner (GCAreaHost2D)
@@ -271,7 +271,7 @@ FallingBoxesChunk (Node2D)
 
 **Drone chunk:**
 
-```
+```text
 DroneChunk (Node2D)
 ├── TileMapLayer
 └── Drone (GCCharacterHost2D)
@@ -285,7 +285,7 @@ DroneChunk (Node2D)
 
 **Patrol enemy chunk:**
 
-```
+```text
 PatrolChunk (Node2D)
 ├── TileMapLayer
 └── PatrolEnemy (GCCharacterHost2D)
@@ -299,7 +299,7 @@ PatrolChunk (Node2D)
 
 **Gate hazard chunk** (game-specific script):
 
-```
+```text
 GateChunk (Node2D)
 ├── TileMapLayer
 └── Gate (GCStaticHost2D)
@@ -309,9 +309,9 @@ GateChunk (Node2D)
     └── GateHazard.gd      ← game-specific: timer-based open/close, kills on close
 ```
 
-### 11. Local state flow
+## 11. Local state flow
 
-```
+```text
 [WallSlideDetector] SENSE: reads is_on_wall() → calls scroll_driver.apply_speed_modifier()
     ↓
 [PlayerInput] DECIDE: reads Input → writes move_direction, facing_direction
@@ -325,10 +325,10 @@ GateChunk (Node2D)
 [GCStreamChunkSource] update(): spawns new chunks ahead, despawns old chunks behind
 ```
 
-### 12. Collision layers recommendation
+## 12. Collision layers recommendation
 
 | Layer | Bit | Used by |
-|-------|-----|---------|
+| ------- | ----- | --------- |
 | Player | 1 | Player body |
 | Walls | 2 | Boundary walls, tilemap platforms |
 | Enemies | 3 | Enemy bodies |
@@ -337,7 +337,7 @@ GateChunk (Node2D)
 | Detection | 6 | Detection areas (drone sensing) |
 | Collectibles | 7 | Pickups, score items |
 
-### 13. Testing the feature
+## 13. Testing the feature
 
 1. Create 2–3 simple chunk scenes (plain Node2D with a ColorRect or Sprite2D so you can see them)
 2. Create `GCChunkData` resources pointing to those scenes with different lengths
