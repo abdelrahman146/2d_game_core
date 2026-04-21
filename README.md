@@ -1,3 +1,5 @@
+<!-- markdownlint-disable MD013 -->
+
 # 2D Game Core
 
 A reusable Godot 4 addon that gives you ready-made foundations for 2D game development. You still work the normal Godot way — scenes, inspector, signals, collision layers — but with powerful reusable building blocks already built.
@@ -38,19 +40,27 @@ The core is flexible enough to support:
 
 ## Using The Addon In A New Game Project
 
-The recommended workflow is to consume this addon as a **git submodule** mounted at `addons/game_core`.
+The recommended workflow is to consume this addon by syncing the `addons/game_core` folder from this repository into your game project.
+
+Why this workflow?
+
+- Godot expects the plugin at `res://addons/game_core/plugin.cfg`.
+- This repository stores the addon under `addons/game_core/`.
+- You can sync only that folder and keep updates simple with normal git commands.
 
 ### 1. Create Your Game Project
 
-Create a new Godot project as usual, then add the submodule:
+Create a new Godot project as usual, then add this repository as a remote and pull only the addon folder into your own `addons/game_core/` path:
 
 ```bash
 cd your-game-project/
-git submodule add https://github.com/YOUR_ORG/2DGameCore.git addons/game_core
-git submodule update --init --recursive
+git remote add game_core git@github.com:abdelrahman146/2d_game_core.git
+git fetch game_core
+git checkout game_core/main -- addons/game_core
+git commit -m "Add game_core addon"
 ```
 
-This clones the addon into `addons/game_core/` inside your project.
+This writes only the addon content into `addons/game_core/` (no nested `addons/game_core/addons/game_core`).
 
 ### 2. Enable The Plugin
 
@@ -61,6 +71,11 @@ Open your project in Godot, then:
 3. Check the **Enable** box.
 
 The addon's custom types (actor hosts, behaviors, screens, world nodes, resources) will now appear in the editor's "Add Node" and "New Resource" dialogs.
+
+Quick verification:
+
+- Confirm this file exists: `addons/game_core/plugin.cfg`
+- Search for `GCBootstrap` in **Create New Node**
 
 ### 3. Set Up The Bootstrap
 
@@ -89,47 +104,42 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for full details on each layer.
 
 ```bash
 cd your-game-project/
-git submodule update --remote addons/game_core
+git fetch game_core
+git checkout game_core/main -- addons/game_core
+git commit -m "Update game_core addon"
 ```
 
-This fetches the latest commit from the addon's default branch.
+This pulls the latest addon changes into your game project while keeping the path stable at `addons/game_core`.
 
 ### Pin To A Specific Version
 
-If you prefer stability over bleeding edge, pin to a tag or branch:
+If you prefer stability over bleeding edge, pin to a specific tag by checking out that tag's addon folder:
 
 ```bash
-cd addons/game_core
-git checkout v1.0.0   # or any tag/branch
-cd ../..
-git add addons/game_core
-git commit -m "Pin game_core to v1.0.0"
+cd your-game-project/
+git fetch game_core --tags
+git checkout v1.0.0 -- addons/game_core
+git commit -m "Pin game_core addon to v1.0.0"
 ```
 
 ### After Cloning Your Game Project
 
-When teammates (or CI) clone your game project for the first time:
+No extra submodule command is required. Teammates and CI can just clone your game repo normally:
 
 ```bash
-git clone --recurse-submodules https://github.com/YOUR_ORG/your-game.git
-```
-
-Or if already cloned without submodules:
-
-```bash
-git submodule update --init --recursive
+git clone git@github.com:abdelrahman146/your-game.git
 ```
 
 ### Updating In Day-To-Day Work
 
 ```bash
-# Pull your game repo and update submodules in one step
-git pull --recurse-submodules
+# Pull your game repo
+git pull
 
-# Or update the addon independently
-git submodule update --remote addons/game_core
-git add addons/game_core
-git commit -m "Update game_core to latest"
+# Update addon from game_core remote
+git fetch game_core
+git checkout game_core/main -- addons/game_core
+git commit -m "Update game_core addon"
 ```
 
 ---
@@ -141,7 +151,7 @@ git commit -m "Update game_core to latest"
 1. Clone this repository directly (not as a submodule):
 
    ```bash
-   git clone https://github.com/YOUR_ORG/2DGameCore.git
+   git clone git@github.com:abdelrahman146/2d_game_core.git
    cd 2DGameCore
    ```
 

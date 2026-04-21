@@ -1,216 +1,164 @@
-# Core Loop Integration Guide
+# Core Loop Guide
 
-Full wiring of the Termination Protocol game skeleton: title screen
-through gameplay to game-over, using the `game_core` addon.
+This guide takes the world from `chunk_processing.md` and wraps it in a
+full playable loop:
 
-## Prerequisites
+1. Bootstrap autoload scene.
+2. Title screen.
+3. Gameplay screen with HUD and joystick.
+4. Game-over screen.
+5. Optional local leaderboard service for testing.
 
-This guide builds on top of the
-[chunk processing guide](chunk_processing.md).
-Complete that setup first (chunk data resources, chunk scenes,
-`GCStreamChunkSource`, `GCScrollDriver`, and `RunnerChunkSelector`).
+Everything in this guide has been checked against the current addon
+scripts in `addons/game_core`.
 
-## Gap analysis
+## Before you start
 
-| Mechanic | Coverage | What exists | What is missing |
-|---|---|---|---|
-| Horizontal movement | Full | `GCSimpleMovement` | --- |
-| Wall-slide (scroll mod) | Full | `GCScrollDriver.apply_speed_modifier()` | Game-specific behavior |
-| One-hit death | Full | `GCHealth` (max\_health=1) | --- |
-| Chunk streaming | Full | `GCStreamChunkSource`, `GCChunkSelector` | --- |
-| Scroll driver | Full | `GCScrollDriver` | --- |
-| Flip / facing | Full | `GCFacing`, `GCAnimationBehavior` | --- |
-| Collectible pickup | Full | `GCCollectible` + `GCAreaHost2D` | --- |
-| Screen navigation | Full | `GCScreenRouter`, `GCScreen`, `GCScreenDef` | --- |
-| HUD layer | Full | `GCHudLayer` | --- |
-| Camera | Full | `GCCamera2D` (FIXED mode) | --- |
-| Leaderboard | Partial | `GCLeaderboardService` (interface) | User implements backend |
-| Virtual joystick | **Added** | `GCVirtualJoystick` | --- |
-| Screen shake | **Added** | `GCCamera2D.shake()` | --- |
-| Hit-stop / freeze | **Added** | `GCHitStop` | --- |
-| Score tracking | Game-specific | --- | Game script |
-| Parallax background | Godot-native | --- | `ParallaxBackground` setup |
-| Death to game-over | Game-specific | `GCHealth.died` + router | Game script |
-| Rewarded ad continue | Game-specific | --- | Ad SDK integration |
+Complete `chunk_processing.md` first. You should already have these
+pieces working:
 
-## Addon files added or modified
-
-| File | Change |
+| Required output | Suggested path |
 |---|---|
-| `addons/game_core/input/gc_virtual_joystick.gd` | New --- touch virtual joystick Control |
-| `addons/game_core/core/gc_hit_stop.gd` | New --- freeze-frame utility Node |
-| `addons/game_core/world/gc_camera.gd` | Modified --- added `shake()` method |
-| `addons/game_core/plugin.gd` | Modified --- registered `GCHitStop` and `GCVirtualJoystick` |
-| `tests/unit/test_camera_shake.gd` | New test suite |
-| `tests/unit/test_hit_stop.gd` | New test suite |
-| `tests/unit/test_virtual_joystick.gd` | New test suite |
+| Player scene | `res://scenes/actors/player.tscn` |
+| Game world scene | `res://scenes/world/game_world.tscn` |
+| Chunk data resources | `res://data/chunks/...` |
+| Stream source resource | `res://data/chunks/termination_protocol_stream_source.tres` |
+| Standalone chunk test scene | `res://scenes/debug/chunk_processing_test.tscn` |
 
-## 1 --- Collision layers
+If the standalone chunk test scene does not work yet, stop here and fix
+that first. This guide assumes the chunk world is already solid.
 
-Set these in **Project > Project Settings > Layer Names > 2D Physics**:
+## Scene tree legend
 
-| Layer | Bit | Used by |
-|---|---|---|
-| Player | 1 | Player body |
-| Walls | 2 | Boundary walls, tilemap platforms |
-| Enemies | 3 | Enemy bodies |
-| Projectiles | 4 | Bombs, bullets |
-| Hazards | 5 | Gates, robot arms, deadly platform floors |
-| Detection | 6 | Detection areas (drone sensing) |
-| Collectibles | 7 | Pickup areas |
+Use this legend when reading node trees in this guide:
 
-## 2 --- Full scene tree
-
-```text
-Root (Node)
-├── GCBootstrap (autoload)
-│   └── GCScreenRouter
-│       ├── TitleScreen (GCScreen)
-│       ├── GameplayScreen (GCScreen)
-│       └── GameOverScreen (GCScreen)
-├── GCHudLayer
-│   ├── ScoreLabel (Label)
-│   ├── DistanceLabel (Label)
-│   └── GCVirtualJoystick
-└── (current screen scene is added as child of the router)
-```
-
-The `GameplayScreen` scene (loaded by the router) contains:
-
-```text
-GameplayScreen (GCScreen)
-├── GameWorld (Node2D)
-│   ├── ParallaxBackground
-│   │   ├── DistantCityLayer (ParallaxLayer)
-│   │   │   └── Sprite2D
-│   │   ├── MidBuildingsLayer (ParallaxLayer)
-│   │   │   └── Sprite2D
-│   │   └── NearStructuresLayer (ParallaxLayer)
-│   │       └── Sprite2D
-│   ├── GCWorldController
-│   ├── GCScrollDriver
-│   ├── BoundaryWalls (StaticBody2D)
-│   │   ├── LeftWall (CollisionShape2D)
-│   │   └── RightWall (CollisionShape2D)
-│   ├── Player (GCCharacterHost2D)
-│   │   ├── CollisionShape2D
-│   │   ├── AnimatedSprite2D
-│   │   ├── PlayerInputBehavior
-│   │   ├── GCSimpleMovement
-│   │   ├── GCHealth
-│   │   ├── GCFacing
-│   │   ├── GCAnimationBehavior
-│   │   └── WallSlideDetector
-│   └── GCCamera2D (mode=FIXED)
-└── GCHitStop
-```
-
-## 3 --- Player scene
-
-### Scene structure
-
-```text
-Player (GCCharacterHost2D)
-├── CollisionShape2D    → RectangleShape2D (24 x 28 px)
-├── AnimatedSprite2D    → spritesheet with idle, flip, wall_slide, fall
-├── PlayerInputBehavior → game-specific DECIDE behavior (see below)
-├── GCSimpleMovement    → default_speed = 200
-├── GCHealth            → max_health = 1
-├── GCFacing            → flip_sprite = true
-├── GCAnimationBehavior → idle="idle", move="flip", death="death"
-└── WallSlideDetector   → slide_speed_modifier = 0.5
-```
-
-### Inspector configuration
-
-| Node | Export | Value |
-|---|---|---|
-| `CollisionShape2D` | shape | `RectangleShape2D` (24 x 28) |
-| `Player` (host) | collision layer | 1 (Player) |
-| `Player` (host) | collision mask | 2 (Walls), 5 (Hazards) |
-| `GCSimpleMovement` | default\_speed | `200` |
-| `GCHealth` | max\_health | `1` |
-| `GCHealth` | invincibility\_time | `0.0` |
-| `GCFacing` | flip\_sprite | `true` |
-| `WallSlideDetector` | slide\_speed\_modifier | `0.5` |
-
-### PlayerInputBehavior (game-specific)
-
-Save at `res://scripts/player_input_behavior.gd`:
-
-```gdscript
-extends GCBehavior
-class_name PlayerInputBehavior
-## Reads input from a GCVirtualJoystick (or keyboard fallback)
-## and writes move_direction + facing_direction to local_state.
-
-@export var joystick: GCVirtualJoystick
-
-## Keyboard fallback actions (set in Input Map).
-@export var action_left: StringName = &"move_left"
-@export var action_right: StringName = &"move_right"
-
-
-func _init() -> void:
-	phase = Phase.DECIDE
-
-
-func on_physics(host: Node, _delta: float) -> void:
-	var dir := 0.0
-
-	# Prefer joystick if available and pressed
-	if joystick and joystick.is_pressed:
-		dir = joystick.direction.x
-	else:
-		dir = Input.get_axis(action_left, action_right)
-
-	host.local_state[&"move_direction"] = Vector2(dir, 0)
-	if dir != 0.0:
-		host.local_state[&"facing_direction"] = 1 if dir > 0 else -1
-```
-
-### WallSlideDetector (game-specific)
-
-Already covered in
-[chunk\_processing.md --- step 7](chunk_processing.md).
-The behavior detects `is_on_wall()` and calls
-`GCScrollDriver.apply_speed_modifier()`.
-
-## 4 --- Collectible scenes
-
-### Coin
-
-```text
-Coin (GCAreaHost2D)
-├── CollisionShape2D  → CircleShape2D (radius 8)
-├── AnimatedSprite2D  → spinning coin animation
-└── GCCollectible
-    ├── collect_group = &"player"
-    ├── reward_type   = &"coin"
-    ├── reward_amount = 1
-    └── destroy_on_collect = true
-```
-
-| Node | Export | Value |
-|---|---|---|
-| `Coin` (host) | collision layer | 7 (Collectibles) |
-| `Coin` (host) | collision mask | 1 (Player) |
-
-### Cash bill
-
-Identical to Coin except:
-
-| Export | Value |
+| Marker | Meaning |
 |---|---|
-| reward\_type | `&"cash"` |
-| reward\_amount | `5` (or higher for riskier placements) |
+| `[Node]` | Add this node directly in the current scene in the editor. |
+| `[Scene instance]` | Instantiate another `.tscn` as a child in the editor. |
+| `[Runtime]` | Created by addon code or by your own script at runtime. |
 
-Place coins and cash bills inside chunk scenes at design time.
+## 1. Create the bootstrap scene
 
-## 5 --- Score manager (game-specific)
+Create `res://scenes/bootstrap/bootstrap.tscn` with this tree:
 
-Save at `res://scripts/score_manager.gd`.
-Attach to the `GameplayScreen` node or the `GameWorld` root.
+```text
+Bootstrap [Scene root: GCBootstrap]
+├── GCScreenRouter [Node]
+└── GCHudLayer [Node]
+```
+
+This scene is the composition root for the game.
+
+Important: autoload this scene as `GCBootstrap`. Do not autoload only the
+bare `gc_bootstrap.gd` script if you want the router and HUD to exist as
+child nodes.
+
+You will finish the router configuration in step 9 after the screen
+scenes exist.
+
+## 2. Create the HUD content scene
+
+Create `res://scenes/ui/game_hud.tscn` with this tree:
+
+```text
+GameHud [Scene root: Control]
+├── MarginContainer [Node]
+│   └── VBoxContainer [Node]
+│       ├── ScoreLabel [Node: Label]
+│       └── DistanceLabel [Node: Label]
+└── GCVirtualJoystick [Node]
+```
+
+`GCHudLayer` is the persistent HUD container in the bootstrap scene.
+`GameHud.tscn` is the content scene you add into that container at
+runtime. They are not two separate HUD systems.
+
+Set `GameHud` itself to `Full Rect` layout so its child controls can
+anchor against the full viewport.
+
+### HUD settings
+
+Set these values in the inspector:
+
+| Node | Setting | Value |
+|---|---|---|
+| `ScoreLabel` | `text` | `Score: 0` |
+| `DistanceLabel` | `text` | `0 m` |
+| `GCVirtualJoystick` | `joystick_mode` | `FIXED` |
+| `GCVirtualJoystick` | `dead_zone` | `0.15` |
+| `GCVirtualJoystick` | `visibility_mode` | `ALWAYS` |
+| `GCVirtualJoystick` | `size` | `Vector2(200, 200)` |
+| `MarginContainer` | Layout | top-left area for the score labels |
+
+### Joystick anchors
+
+Use these anchors and offsets on `GCVirtualJoystick`:
+
+| Property | Value |
+|---|---|
+| `anchor_left` | `0.0` |
+| `anchor_top` | `1.0` |
+| `anchor_right` | `0.0` |
+| `anchor_bottom` | `1.0` |
+| `offset_left` | `20` |
+| `offset_top` | `-220` |
+| `offset_right` | `220` |
+| `offset_bottom` | `-20` |
+
+This places the joystick in the lower-left corner with a 20 pixel margin.
+
+## 3. Create the pickup scenes
+
+Create these two reusable scenes:
+
+| Scene | Path |
+|---|---|
+| Coin | `res://scenes/pickups/coin.tscn` |
+| Cash bill | `res://scenes/pickups/cash_bill.tscn` |
+
+Base tree for both scenes:
+
+```text
+Pickup [Scene root: GCAreaHost2D]
+├── CollisionShape2D [Node]
+├── AnimatedSprite2D [Node]
+└── GCCollectible [Node]
+```
+
+### Coin settings
+
+| Node | Setting | Value |
+|---|---|---|
+| `Coin` | Collision Layer | `Collectibles` |
+| `Coin` | Collision Mask | `Player` |
+| `CollisionShape2D` | Shape | `CircleShape2D`, radius `8` |
+| `GCCollectible` | `collect_group` | `&"player"` |
+| `GCCollectible` | `reward_type` | `&"coin"` |
+| `GCCollectible` | `reward_amount` | `1` |
+| `GCCollectible` | `destroy_on_collect` | `true` |
+
+### Cash bill settings
+
+Use the same scene shape, but change these values:
+
+| Node | Setting | Value |
+|---|---|---|
+| `GCCollectible` | `reward_type` | `&"cash"` |
+| `GCCollectible` | `reward_amount` | `5` |
+
+After both scenes exist, place them inside your chunk scenes as normal
+editor scene instances under a `Pickups` helper node or anywhere else
+that fits your chunk layout.
+
+This assumes the player is already in the `player` group from
+`chunk_processing.md`.
+
+## 4. Create the score manager script
+
+Save this as `res://scripts/ui/score_manager.gd`.
+
+Attach it to a plain `Node` in `gameplay_screen.tscn` in step 6.
 
 ```gdscript
 extends Node
@@ -219,678 +167,529 @@ class_name ScoreManager
 signal score_updated(total: int)
 signal distance_updated(distance: float)
 
-var cash: int = 0
-var distance: float = 0.0
-
+var cash := 0
+var distance := 0.0
 var _scroll_driver: GCScrollDriver
 
 
 func setup(scroll_driver: GCScrollDriver) -> void:
-	_scroll_driver = scroll_driver
+    _scroll_driver = scroll_driver
 
 
 func _physics_process(delta: float) -> void:
-	if _scroll_driver and _scroll_driver.active:
-		distance += _scroll_driver.current_speed * delta
-		distance_updated.emit(distance)
+    if _scroll_driver and _scroll_driver.active:
+        distance += _scroll_driver.current_speed * delta
+        distance_updated.emit(distance)
+        score_updated.emit(get_total_score())
 
 
 func add_cash(amount: int) -> void:
-	cash += amount
-	score_updated.emit(get_total_score())
+    cash += amount
+    score_updated.emit(get_total_score())
 
 
 func get_total_score() -> int:
-	# 1 point per 100 pixels fallen + raw cash value
-	return int(distance / 100.0) + cash
+    return int(distance / 100.0) + cash
 
 
 func reset() -> void:
-	cash = 0
-	distance = 0.0
+    cash = 0
+    distance = 0.0
+    score_updated.emit(get_total_score())
+    distance_updated.emit(distance)
 ```
 
-### Connecting collectibles to score
+## 5. Create the title screen
 
-In the gameplay screen script, after the world opens and chunks spawn,
-connect each collectible's signal. The simplest approach is to connect
-when chunks spawn:
-
-```gdscript
-# In your gameplay screen or game world script:
-func _on_chunk_spawned(chunk_node: Node, _chunk_data: Resource) -> void:
-	# Find all GCCollectible behaviors in the chunk
-	for node in chunk_node.get_children():
-		if node.has_method("get_children"):
-			for child in node.get_children():
-				if child is GCCollectible:
-					child.collected.connect(_on_collectible_picked_up)
-
-
-func _on_collectible_picked_up(_collector: Node, reward: Dictionary) -> void:
-	var amount: int = reward.get(&"amount", 1)
-	score_manager.add_cash(amount)
-```
-
-## 6 --- HUD setup
-
-### HUD scene structure
-
-Create a `GameHud.tscn` scene:
+Create `res://scenes/screens/title_screen.tscn` with this tree:
 
 ```text
-GameHud (Control)
-├── MarginContainer
-│   ├── VBoxContainer (top-left anchor)
-│   │   ├── ScoreLabel (Label)   → "Score: 0"
-│   │   └── DistanceLabel (Label) → "0 m"
-│   └── (empty right side for future elements)
-└── GCVirtualJoystick (bottom-left anchor)
-    ├── joystick_mode = FIXED
-    ├── dead_zone = 0.15
-    ├── visibility_mode = ALWAYS
-    └── size = Vector2(200, 200)
+TitleScreen [Scene root: GCScreen, script: res://scripts/screens/title_screen.gd]
+└── CenterContainer [Node]
+    └── VBoxContainer [Node]
+        ├── TitleLabel [Node: Label]
+        └── PlayButton [Node: Button]
 ```
 
-### Anchoring the joystick
+Set `CenterContainer` to `Full Rect` layout so it fills the screen.
 
-| Property | Value |
-|---|---|
-| anchor\_left | 0.0 |
-| anchor\_top | 1.0 |
-| anchor\_right | 0.0 |
-| anchor\_bottom | 1.0 |
-| offset\_left | 20 |
-| offset\_top | -220 |
-| offset\_right | 220 |
-| offset\_bottom | -20 |
+Suggested label/button text:
 
-This places a 200 x 200 joystick in the bottom-left corner with
-20 px padding from the screen edge.
+| Node | Setting | Value |
+|---|---|---|
+| `TitleLabel` | `text` | `TERMINATION PROTOCOL` |
+| `PlayButton` | `text` | `PLAY` |
 
-### Updating HUD labels
-
-In the gameplay screen script:
-
-```gdscript
-var _score_label: Label
-var _distance_label: Label
-
-func _setup_hud() -> void:
-	var hud: GCHudLayer = GCBootstrap.instance.get_node("GCHudLayer")
-	var hud_scene := preload("res://scenes/ui/game_hud.tscn")
-	var hud_root: Control = hud.add_element(&"game_hud", hud_scene)
-	_score_label = hud_root.get_node("MarginContainer/VBoxContainer/ScoreLabel")
-	_distance_label = hud_root.get_node("MarginContainer/VBoxContainer/DistanceLabel")
-
-	# Connect the joystick to the player input behavior
-	var joystick: GCVirtualJoystick = hud_root.get_node("GCVirtualJoystick")
-	player_input_behavior.joystick = joystick
-
-	score_manager.score_updated.connect(func(total: int) -> void:
-		_score_label.text = "Score: %d" % total
-	)
-	score_manager.distance_updated.connect(func(dist: float) -> void:
-		_distance_label.text = "%d m" % int(dist / 100.0)
-	)
-```
-
-## 7 --- Screen flow
-
-### Screen definitions
-
-Configure `GCScreenRouter.definitions` in the inspector with three
-`GCScreenDef` resources:
-
-| Screen id | Scene | Persistent | Transition |
-|---|---|---|---|
-| `&"title"` | `res://scenes/screens/title_screen.tscn` | false | `GCFadeTransition` (0.3 s) |
-| `&"gameplay"` | `res://scenes/screens/gameplay_screen.tscn` | false | `GCFadeTransition` (0.5 s) |
-| `&"game_over"` | `res://scenes/screens/game_over_screen.tscn` | false | `GCFadeTransition` (0.3 s) |
-
-### TitleScreen (`res://scenes/screens/title_screen.tscn`)
-
-```text
-TitleScreen (GCScreen)
-├── CenterContainer
-│   ├── VBoxContainer
-│   │   ├── TitleLabel (Label)   → "TERMINATION PROTOCOL"
-│   │   └── PlayButton (Button)  → "PLAY"
-```
-
-Script at `res://scripts/screens/title_screen.gd`:
+Create `res://scripts/screens/title_screen.gd`:
 
 ```gdscript
 extends GCScreen
 
-@onready var play_button: Button = %PlayButton
+@onready var play_button := get_node(
+    "CenterContainer/VBoxContainer/PlayButton"
+) as Button
 
 
 func enter(_payload: Dictionary = {}) -> void:
-	play_button.pressed.connect(_on_play)
+    if not play_button.pressed.is_connected(_on_play):
+        play_button.pressed.connect(_on_play)
+
+    var bootstrap := _bootstrap()
+    if not bootstrap.context.has_player_value(&"player_id"):
+        bootstrap.context.set_player_value(&"player_id", "local_player")
 
 
 func _on_play() -> void:
-	var router := get_parent() as GCScreenRouter
-	router.go_to(&"gameplay")
+    var router := get_parent() as GCScreenRouter
+    router.go_to(&"gameplay")
+
+
+func _bootstrap() -> GCBootstrap:
+    return get_tree().root.get_node("GCBootstrap") as GCBootstrap
 ```
 
-### GameplayScreen (`res://scenes/screens/gameplay_screen.tscn`)
+## 6. Create the gameplay screen
 
-This is the main game scene described in section 2.
-Script at `res://scripts/screens/gameplay_screen.gd`:
+Create `res://scenes/screens/gameplay_screen.tscn` with this tree:
+
+```text
+GameplayScreen [Scene root: GCScreen, script: res://scripts/screens/gameplay_screen.gd]
+├── GameWorld [Scene instance: res://scenes/world/game_world.tscn]
+├── GCHitStop [Node]
+└── ScoreManager [Node, script: res://scripts/ui/score_manager.gd]
+```
+
+Create `res://scripts/screens/gameplay_screen.gd`:
 
 ```gdscript
 extends GCScreen
 
-@onready var world_controller: GCWorldController = %GCWorldController
-@onready var scroll_driver: GCScrollDriver = %GCScrollDriver
-@onready var camera: GCCamera2D = %GCCamera2D
-@onready var hit_stop: GCHitStop = %GCHitStop
-@onready var player: GCCharacterHost2D = %Player
-@onready var score_manager: ScoreManager = %ScoreManager
+@onready var game_world := get_node("GameWorld") as TPGameWorld
+@onready var hit_stop := get_node("GCHitStop") as GCHitStop
+@onready var score_manager := get_node("ScoreManager") as ScoreManager
 
 var _player_health: GCHealth
+var _hud_root: Control
+var _score_label: Label
+var _distance_label: Label
 var _continued := false
+var _death_in_progress := false
 
 
 func enter(_payload: Dictionary = {}) -> void:
-	_setup_hud()
+    _continued = false
+    _death_in_progress = false
 
-	score_manager.setup(scroll_driver)
+    var chunk_source := game_world.get_chunk_source()
+    if chunk_source and not chunk_source.chunk_spawned.is_connected(
+        _on_chunk_spawned
+    ):
+        chunk_source.chunk_spawned.connect(_on_chunk_spawned)
 
-	# Open the world (starts chunk streaming)
-	world_controller.configure(context)
-	world_controller.open_world()
+    _player_health = game_world.get_player_health()
+    if _player_health and not _player_health.died.is_connected(
+        _on_player_died
+    ):
+        _player_health.died.connect(_on_player_died)
 
-	# Connect chunk spawn for collectible wiring
-	var source: GCStreamChunkSource = scroll_driver.chunk_source
-	if source:
-		source.chunk_spawned.connect(_on_chunk_spawned)
+    score_manager.reset()
+    score_manager.setup(game_world.scroll_driver)
 
-	# Connect player death
-	_player_health = _find_health(player)
-	if _player_health:
-		_player_health.died.connect(_on_player_died)
+    _mount_hud()
+    _bind_score_labels()
+
+    game_world.scroll_driver.active = true
+    game_world.open_with_context(context)
+    _connect_loaded_collectibles()
 
 
 func exit() -> void:
-	var hud: GCHudLayer = GCBootstrap.instance.get_node("GCHudLayer")
-	hud.remove_element(&"game_hud")
-	world_controller.close_world()
-	scroll_driver.reset()
+    var hud := _bootstrap().get_node("GCHudLayer") as GCHudLayer
+    hud.remove_element(&"game_hud")
+    game_world.close_world()
 
 
-func _on_player_died() -> void:
-	# Hit-stop + screen shake for dramatic death
-	hit_stop.freeze(0.08)
-	camera.shake(12.0, 0.3)
+func _mount_hud() -> void:
+    var hud := _bootstrap().get_node("GCHudLayer") as GCHudLayer
+    var hud_scene := preload("res://scenes/ui/game_hud.tscn")
+    _hud_root = hud.add_element(&"game_hud", hud_scene) as Control
+    _score_label = _hud_root.get_node(
+        "MarginContainer/VBoxContainer/ScoreLabel"
+    ) as Label
+    _distance_label = _hud_root.get_node(
+        "MarginContainer/VBoxContainer/DistanceLabel"
+    ) as Label
 
-	# Stop scrolling
-	scroll_driver.active = false
-
-	# Wait a beat, then transition
-	await get_tree().create_timer(0.6, true, false, true).timeout
-
-	if not _continued:
-		_show_continue_prompt()
-	else:
-		_go_to_game_over()
-
-
-func _show_continue_prompt() -> void:
-	# --- Rewarded ad integration point ---
-	# Show your ad SDK's rewarded ad here.
-	# On ad completion, call _continue_run().
-	# On ad skip/close, call _go_to_game_over().
-	# Placeholder: go straight to game over.
-	_go_to_game_over()
+    var joystick := _hud_root.get_node("GCVirtualJoystick") as GCVirtualJoystick
+    var player_input := game_world.get_player_input()
+    if player_input:
+        player_input.joystick = joystick
 
 
-func _continue_run() -> void:
-	_continued = true
-	# Revive player
-	_player_health.heal(player, 1)
-	player.local_state[&"is_alive"] = true
-	scroll_driver.active = true
+func _bind_score_labels() -> void:
+    if not score_manager.score_updated.is_connected(_on_score_updated):
+        score_manager.score_updated.connect(_on_score_updated)
+    if not score_manager.distance_updated.is_connected(_on_distance_updated):
+        score_manager.distance_updated.connect(_on_distance_updated)
+
+    _on_score_updated(score_manager.get_total_score())
+    _on_distance_updated(score_manager.distance)
 
 
-func _go_to_game_over() -> void:
-	var payload := {
-		&"score": score_manager.get_total_score(),
-		&"distance": score_manager.distance,
-		&"cash": score_manager.cash,
-	}
-	var router := get_parent() as GCScreenRouter
-	router.go_to(&"game_over", payload)
+func _on_score_updated(total: int) -> void:
+    if _score_label:
+        _score_label.text = "Score: %d" % total
 
 
-func _on_chunk_spawned(chunk_node: Node, _chunk_data: Resource) -> void:
-	for node in chunk_node.get_children():
-		for child in node.get_children():
-			if child is GCCollectible:
-				child.collected.connect(_on_collectible_picked_up)
+func _on_distance_updated(distance: float) -> void:
+    if _distance_label:
+        _distance_label.text = "%d m" % int(distance / 100.0)
+
+
+func _on_chunk_spawned(
+    chunk_node: Node,
+    _chunk_data: Resource,
+    _index: int
+) -> void:
+    _connect_collectibles_recursive(chunk_node)
+
+
+func _connect_loaded_collectibles() -> void:
+    var chunk_source := game_world.get_chunk_source()
+    if chunk_source == null:
+        return
+
+    for entry in chunk_source.get_loaded_chunks():
+        var chunk_node := entry.get(&"node", null) as Node
+        if chunk_node:
+            _connect_collectibles_recursive(chunk_node)
+
+
+func _connect_collectibles_recursive(node: Node) -> void:
+    for child in node.get_children():
+        if child is GCCollectible:
+            var collectible := child as GCCollectible
+            if not collectible.collected.is_connected(
+                _on_collectible_picked_up
+            ):
+                collectible.collected.connect(_on_collectible_picked_up)
+        _connect_collectibles_recursive(child)
 
 
 func _on_collectible_picked_up(_collector: Node, reward: Dictionary) -> void:
-	score_manager.add_cash(reward.get(&"amount", 1))
+    score_manager.add_cash(int(reward.get(&"amount", 1)))
 
 
-func _find_health(host: Node) -> GCHealth:
-	for child in host.get_children():
-		if child is GCHealth:
-			return child
-	return null
+func _on_player_died() -> void:
+    if _death_in_progress:
+        return
+
+    _death_in_progress = true
+    hit_stop.freeze(0.08)
+    game_world.camera.shake(12.0, 0.3)
+    game_world.scroll_driver.active = false
+
+    await get_tree().create_timer(0.6, true, false, true).timeout
+
+    if not _continued:
+        _show_continue_prompt()
+    else:
+        _go_to_game_over()
 
 
-# --- HUD setup (from section 6) ---
+func _show_continue_prompt() -> void:
+    # Rewarded ad integration point.
+    # On ad success, call _continue_run().
+    # On cancel or failure, call _go_to_game_over().
+    _go_to_game_over()
 
-var _score_label: Label
-var _distance_label: Label
 
-func _setup_hud() -> void:
-	var hud: GCHudLayer = GCBootstrap.instance.get_node("GCHudLayer")
-	var hud_scene := preload("res://scenes/ui/game_hud.tscn")
-	var hud_root: Control = hud.add_element(&"game_hud", hud_scene)
-	_score_label = hud_root.get_node("MarginContainer/VBoxContainer/ScoreLabel")
-	_distance_label = hud_root.get_node("MarginContainer/VBoxContainer/DistanceLabel")
+func _continue_run() -> void:
+    _continued = true
+    _death_in_progress = false
 
-	var joystick: GCVirtualJoystick = hud_root.get_node("GCVirtualJoystick")
-	var input_beh: PlayerInputBehavior
-	for child in player.get_children():
-		if child is PlayerInputBehavior:
-			input_beh = child
-			break
-	if input_beh:
-		input_beh.joystick = joystick
+    if _player_health:
+        _player_health.heal(game_world.player, 1)
 
-	score_manager.score_updated.connect(func(total: int) -> void:
-		_score_label.text = "Score: %d" % total
-	)
-	score_manager.distance_updated.connect(func(dist: float) -> void:
-		_distance_label.text = "%d m" % int(dist / 100.0)
-	)
+    game_world.player.local_state[&"is_alive"] = true
+    game_world.player.local_state[&"just_hit"] = false
+    game_world.player.velocity = Vector2.ZERO
+    game_world.scroll_driver.active = true
+
+
+func _go_to_game_over() -> void:
+    var payload := {
+        &"score": score_manager.get_total_score(),
+        &"distance": score_manager.distance,
+        &"cash": score_manager.cash,
+    }
+
+    var router := get_parent() as GCScreenRouter
+    router.go_to(&"game_over", payload)
+
+
+func _bootstrap() -> GCBootstrap:
+    return get_tree().root.get_node("GCBootstrap") as GCBootstrap
 ```
 
-### GameOverScreen (`res://scenes/screens/game_over_screen.tscn`)
+## 7. Create a local leaderboard service
+
+Save this as
+`res://scripts/services/termination_protocol_leaderboard_service.gd`.
+
+This implementation is deliberately in-memory. It is accurate for the
+current service API and is enough to validate the screen flow locally.
+
+Later, if you replace it with an HTTP-backed service, remember that
+`GCService` is `RefCounted`, not `Node`. Do not call `add_child()` from
+inside the service itself.
+
+```gdscript
+extends GCLeaderboardService
+class_name TerminationProtocolLeaderboardService
+
+var _scores_by_board: Dictionary = {}
+
+
+func submit_score(
+    board_id: String,
+    player_id: String,
+    score: int,
+    _extra: Dictionary = {}
+) -> void:
+    var board_scores: Dictionary = _scores_by_board.get(board_id, {})
+    var previous := int(board_scores.get(player_id, -1))
+
+    if score > previous:
+        board_scores[player_id] = score
+
+    _scores_by_board[board_id] = board_scores
+    score_submitted.emit(board_id, true)
+
+
+func get_top_scores(board_id: String, count: int = 10) -> Array:
+    var board_scores: Dictionary = _scores_by_board.get(board_id, {})
+    var rows: Array = []
+
+    for player_id in board_scores.keys():
+        rows.append({
+            &"player_id": player_id,
+            &"score": int(board_scores[player_id]),
+        })
+
+    rows.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+        return int(a.get(&"score", 0)) > int(b.get(&"score", 0))
+    )
+
+    return rows.slice(0, mini(count, rows.size()))
+
+
+func get_player_rank(board_id: String, player_id: String) -> int:
+    var board_scores: Dictionary = _scores_by_board.get(board_id, {})
+    var rows := get_top_scores(board_id, board_scores.size())
+
+    for index in range(rows.size()):
+        if String(rows[index].get(&"player_id", "")) == player_id:
+            return index + 1
+
+    return -1
+```
+
+## 8. Create the game-over screen
+
+Create `res://scenes/screens/game_over_screen.tscn` with this tree:
 
 ```text
-GameOverScreen (GCScreen)
-├── CenterContainer
-│   └── VBoxContainer
-│       ├── GameOverLabel (Label) → "GAME OVER"
-│       ├── ScoreLabel (Label)
-│       ├── DistanceLabel (Label)
-│       ├── CashLabel (Label)
-│       ├── RankLabel (Label)
-│       ├── RetryButton (Button) → "RETRY"
-│       └── MenuButton (Button)  → "MENU"
+GameOverScreen [Scene root: GCScreen, script: res://scripts/screens/game_over_screen.gd]
+└── CenterContainer [Node]
+    └── VBoxContainer [Node]
+        ├── GameOverLabel [Node: Label]
+        ├── ScoreLabel [Node: Label]
+        ├── DistanceLabel [Node: Label]
+        ├── CashLabel [Node: Label]
+        ├── RankLabel [Node: Label]
+        ├── RetryButton [Node: Button]
+        └── MenuButton [Node: Button]
 ```
 
-Script at `res://scripts/screens/game_over_screen.gd`:
+Set `CenterContainer` to `Full Rect` layout.
+
+Suggested label/button text:
+
+| Node | Setting | Value |
+|---|---|---|
+| `GameOverLabel` | `text` | `GAME OVER` |
+| `RetryButton` | `text` | `RETRY` |
+| `MenuButton` | `text` | `MENU` |
+
+Create `res://scripts/screens/game_over_screen.gd`:
 
 ```gdscript
 extends GCScreen
 
-@onready var score_label: Label = %ScoreLabel
-@onready var distance_label: Label = %DistanceLabel
-@onready var cash_label: Label = %CashLabel
-@onready var rank_label: Label = %RankLabel
-@onready var retry_button: Button = %RetryButton
-@onready var menu_button: Button = %MenuButton
+@onready var score_label := get_node(
+    "CenterContainer/VBoxContainer/ScoreLabel"
+) as Label
+@onready var distance_label := get_node(
+    "CenterContainer/VBoxContainer/DistanceLabel"
+) as Label
+@onready var cash_label := get_node(
+    "CenterContainer/VBoxContainer/CashLabel"
+) as Label
+@onready var rank_label := get_node(
+    "CenterContainer/VBoxContainer/RankLabel"
+) as Label
+@onready var retry_button := get_node(
+    "CenterContainer/VBoxContainer/RetryButton"
+) as Button
+@onready var menu_button := get_node(
+    "CenterContainer/VBoxContainer/MenuButton"
+) as Button
 
 
 func enter(payload: Dictionary = {}) -> void:
-	var score: int = payload.get(&"score", 0)
-	var distance: float = payload.get(&"distance", 0.0)
-	var cash: int = payload.get(&"cash", 0)
+    var score: int = payload.get(&"score", 0)
+    var distance: float = payload.get(&"distance", 0.0)
+    var cash: int = payload.get(&"cash", 0)
 
-	score_label.text = "Score: %d" % score
-	distance_label.text = "Distance: %d m" % int(distance / 100.0)
-	cash_label.text = "Cash: $%d" % cash
-	rank_label.text = "Submitting..."
+    score_label.text = "Score: %d" % score
+    distance_label.text = "Distance: %d m" % int(distance / 100.0)
+    cash_label.text = "Cash: $%d" % cash
+    rank_label.text = ""
 
-	retry_button.pressed.connect(_on_retry)
-	menu_button.pressed.connect(_on_menu)
+    if not retry_button.pressed.is_connected(_on_retry):
+        retry_button.pressed.connect(_on_retry)
+    if not menu_button.pressed.is_connected(_on_menu):
+        menu_button.pressed.connect(_on_menu)
 
-	# Submit to leaderboard
-	_submit_score(score)
+    _submit_score(score)
 
 
 func _submit_score(score: int) -> void:
-	var lb := GCBootstrap.instance.get_service(&"gc_leaderboard_service")
-	if lb == null:
-		rank_label.text = ""
-		return
-	# You need to implement a GCLeaderboardService subclass for your backend.
-	# This shows the pattern:
-	var player_id: String = GCBootstrap.instance.context.get_player_value(
-		&"player_id", "anonymous"
-	)
-	lb.submit_score("termination_protocol", player_id, score)
-	var rank: int = lb.get_player_rank("termination_protocol", player_id)
-	if rank > 0:
-		rank_label.text = "Rank: #%d" % rank
-	else:
-		rank_label.text = ""
+    var leaderboard := _bootstrap().get_service(
+        &"termination_protocol_leaderboard_service"
+    ) as GCLeaderboardService
+
+    if leaderboard == null:
+        rank_label.text = ""
+        return
+
+    var player_id := String(
+        _bootstrap().context.get_player_value(&"player_id", "local_player")
+    )
+
+    leaderboard.submit_score("termination_protocol", player_id, score)
+    var rank := leaderboard.get_player_rank("termination_protocol", player_id)
+
+    if rank > 0:
+        rank_label.text = "Local Rank: #%d" % rank
+    else:
+        rank_label.text = ""
 
 
 func _on_retry() -> void:
-	var router := get_parent() as GCScreenRouter
-	router.go_to(&"gameplay")
+    var router := get_parent() as GCScreenRouter
+    router.go_to(&"gameplay")
 
 
 func _on_menu() -> void:
-	var router := get_parent() as GCScreenRouter
-	router.go_to(&"title")
+    var router := get_parent() as GCScreenRouter
+    router.go_to(&"title")
+
+
+func _bootstrap() -> GCBootstrap:
+    return get_tree().root.get_node("GCBootstrap") as GCBootstrap
 ```
 
-## 8 --- Parallax background
+## 9. Configure the router and autoload
 
-In the `GameplayScreen` scene, add a `ParallaxBackground` node. Because
-the world scrolls upward (chunks move up while the player stays still),
-drive the parallax offset from the scroll driver each frame rather than
-relying on camera movement.
+Open `bootstrap.tscn` again and configure `GCScreenRouter`.
 
-```text
-ParallaxBackground
-├── DistantCityLayer (ParallaxLayer)
-│   ├── motion_scale = Vector2(0.0, 0.1)
-│   └── Sprite2D  → tall tiling cityscape texture
-├── MidBuildingsLayer (ParallaxLayer)
-│   ├── motion_scale = Vector2(0.0, 0.3)
-│   └── Sprite2D  → mid-ground buildings
-└── NearStructuresLayer (ParallaxLayer)
-    ├── motion_scale = Vector2(0.0, 0.6)
-    └── Sprite2D  → near structures, scaffolding
-```
+### Router settings
 
-### Driving parallax from scroll
+Set these values on `GCScreenRouter`:
 
-Since the camera is FIXED, manually advance the
-`ParallaxBackground.scroll_offset` each frame:
-
-```gdscript
-# In gameplay_screen.gd or a dedicated script on the ParallaxBackground:
-@onready var parallax: ParallaxBackground = %ParallaxBackground
-
-func _physics_process(delta: float) -> void:
-	if scroll_driver and scroll_driver.active:
-		# Scroll upward: negative Y offset increases over time
-		parallax.scroll_offset.y -= scroll_driver.current_speed * delta
-```
-
-### Texture setup
-
-Set each `Sprite2D` texture region to repeat vertically:
-
-- Import the texture with **Repeat** enabled
-- Set `Sprite2D.region_enabled = true`
-- Set `region_rect` height to a large value (e.g., 10000) so it tiles
-- On each `ParallaxLayer`, set `motion_mirroring.y` to the texture height
-
-This creates an infinite scrolling background that reinforces the
-falling sensation.
-
-## 9 --- Death effects: screen shake and hit-stop
-
-The addon now provides both effects out of the box.
-
-### GCCamera2D.shake()
-
-```gdscript
-# Trigger on death:
-camera.shake(12.0, 0.3)
-# strength = 12 pixels max displacement
-# duration = 0.3 seconds with linear decay
-```
-
-The shake stacks --- calling `shake()` during an active shake takes the
-greater strength and restarts the timer.
-
-### GCHitStop.freeze()
-
-```gdscript
-# Trigger on death (before the shake for maximum impact):
-hit_stop.freeze(0.08)
-# Freezes everything for 80 ms via Engine.time_scale = 0
-```
-
-Place the `GCHitStop` node as a child of the gameplay screen.
-It must be in the tree to use `get_tree().create_timer()`.
-
-### Combined death sequence
-
-```gdscript
-func _on_player_died() -> void:
-	hit_stop.freeze(0.08)
-	camera.shake(12.0, 0.3)
-	scroll_driver.active = false
-	await get_tree().create_timer(0.6, true, false, true).timeout
-	_go_to_game_over()
-```
-
-## 10 --- Virtual joystick guide
-
-### What is a virtual joystick
-
-A virtual joystick is an on-screen touch control that replaces physical
-thumbsticks on mobile devices. The player touches and drags within a
-circular area. The joystick outputs a direction vector that game code
-reads each frame, just like reading a gamepad stick.
-
-### Placement
-
-Place `GCVirtualJoystick` as a child of a `CanvasLayer` or
-`GCHudLayer` so it renders on top of the game world. Position it in
-the bottom-left corner for right-handed play (or bottom-right for
-left-handed --- consider offering a setting).
-
-### Configuration
-
-| Export | Purpose | Recommended value |
-|---|---|---|
-| `joystick_mode` | FIXED stays in place; DYNAMIC appears at touch point | `FIXED` for this game |
-| `dead_zone` | Ignore tiny movements (0--1 fraction of radius) | `0.15` |
-| `visibility_mode` | ALWAYS or WHEN\_PRESSED | `ALWAYS` |
-| `base_texture` | Optional custom ring texture | null (uses default circle) |
-| `handle_texture` | Optional custom thumb texture | null (uses default circle) |
-| `base_color` | Ring color when using default draw | `Color(1, 1, 1, 0.25)` |
-| `handle_color` | Thumb color when using default draw | `Color(1, 1, 1, 0.6)` |
-| `handle_ratio` | Thumb size relative to base (0.1--0.8) | `0.35` |
-
-### How it works
-
-1. The joystick's `size` property defines the touch area. A 200 x 200
-   Control means a 100 px radius circle.
-2. When the player touches inside the area, the joystick tracks that
-   finger index (multi-touch safe).
-3. Dragging moves the handle. The offset is clamped to the base radius.
-4. `direction` is a `Vector2` with length 0--1. Values below
-   `dead_zone` are zeroed.
-5. On release, `direction` returns to `Vector2.ZERO`.
-
-### Reading the joystick
-
-The `PlayerInputBehavior` reads `joystick.direction.x` every physics
-frame and writes to `host.local_state[&"move_direction"]`. If the
-joystick is not pressed, it falls back to keyboard input for desktop
-testing.
-
-### Customizing visuals
-
-For a polished release:
-
-1. Create two textures: a ring image for the base and a filled circle
-   for the handle.
-2. Set `base_texture` and `handle_texture` in the inspector.
-3. The textures are scaled to fit the base radius and handle radius
-   automatically.
-4. Adjust `base_color` and `handle_color` opacity to taste --- these
-   tint the textures.
-
-### DYNAMIC mode
-
-In DYNAMIC mode, the joystick base appears wherever the player first
-touches. This is popular for games where the player might want to
-rest their thumb anywhere on the screen. Set
-`visibility_mode = WHEN_PRESSED` with DYNAMIC mode so the joystick
-only appears when touched.
-
-For Termination Protocol, FIXED mode is recommended because the
-corridor is narrow and the player needs a consistent thumb anchor.
-
-## 11 --- Leaderboard integration
-
-`GCLeaderboardService` is an interface. You must subclass it for your
-backend (Firebase, Supabase, PlayFab, custom REST, etc.).
-
-### Implementation skeleton
-
-Save at `res://scripts/services/my_leaderboard_service.gd`:
-
-```gdscript
-extends GCLeaderboardService
-class_name MyLeaderboardService
-
-# Replace with your backend client
-var _api_url := "https://your-backend.example.com/api"
-
-
-func submit_score(
-	board_id: String,
-	player_id: String,
-	score: int,
-	extra: Dictionary = {}
-) -> void:
-	var body := {
-		"board": board_id,
-		"player": player_id,
-		"score": score,
-	}
-	body.merge(extra)
-	# HTTPRequest example:
-	var http := HTTPRequest.new()
-	add_child(http)  # needs to be in tree
-	http.request(
-		_api_url + "/scores",
-		["Content-Type: application/json"],
-		HTTPClient.METHOD_POST,
-		JSON.stringify(body)
-	)
-	var result = await http.request_completed
-	http.queue_free()
-	var success: bool = result[1] == 200
-	score_submitted.emit(board_id, success)
-
-
-func get_top_scores(board_id: String, count: int = 10) -> Array:
-	# Implement your fetch logic here
-	return []
-
-
-func get_player_rank(board_id: String, player_id: String) -> int:
-	# Implement your rank lookup here
-	return -1
-```
-
-### Registering the service
-
-Add the script to `GCBootstrap.service_scripts` in the inspector, or
-register at runtime:
-
-```gdscript
-GCBootstrap.instance.services.register(
-	&"gc_leaderboard_service",
-	MyLeaderboardService.new()
-)
-```
-
-## 12 --- Rewarded ad continue
-
-This is purely game-specific and depends on your ad SDK (AdMob,
-Unity Ads, IronSource, etc.). The integration point is in
-`_show_continue_prompt()` inside the gameplay screen script
-(see section 7).
-
-Pattern:
-
-```gdscript
-func _show_continue_prompt() -> void:
-	if _continued:
-		_go_to_game_over()
-		return
-	# Show a "Continue?" UI overlay
-	# When player taps "Watch Ad":
-	#   ad_sdk.show_rewarded_ad(callback)
-	# On ad_completed: _continue_run()
-	# On ad_skipped:   _go_to_game_over()
-```
-
-## 13 --- Local state flow
-
-```text
-[WallSlideDetector] SENSE
-    reads: host.is_on_wall()
-    action: scroll_driver.apply_speed_modifier(0.5 or 1.0)
-
-[PlayerInputBehavior] DECIDE
-    reads: joystick.direction OR Input.get_axis()
-    writes: move_direction, facing_direction
-
-[GCSimpleMovement] ACT
-    reads: move_direction, speed
-    action: host.velocity.x = dir * speed, move_and_slide()
-
-[GCHealth] ACT
-    reads: health, is_alive
-    writes: health, is_alive, invincible, just_hit
-    signal: died → gameplay screen handles death flow
-
-[GCFacing] PRESENT
-    reads: facing_direction
-    action: flips sprite
-
-[GCAnimationBehavior] PRESENT
-    reads: is_alive, just_hit, move_direction
-    action: plays matching animation
-
-[GCScrollDriver] _physics_process (not a behavior)
-    action: moves chunk root children upward
-    calls: GCStreamChunkSource.update() for lifecycle
-
-[ScoreManager] _physics_process (not a behavior)
-    reads: scroll_driver.current_speed
-    writes: distance, cash, total score
-    signal: score_updated → HUD label
-```
-
-## 14 --- Testing the skeleton
-
-### Manual checklist
-
-1. Run the project. The title screen should appear.
-2. Tap PLAY. The gameplay screen loads with a fade transition.
-3. Chunks scroll upward. The player is vertically stationary.
-4. Move the virtual joystick left and right. The player moves
-   horizontally with flip animation.
-5. Slide into a wall. Scroll speed should visibly slow down.
-6. Collect a coin. The HUD score updates.
-7. Touch a hazard or enemy. The game freezes briefly (hit-stop),
-   the camera shakes, scrolling stops, and the game-over screen
-   appears after a short delay.
-8. On the game-over screen, score, distance, and cash are displayed.
-9. Tap RETRY. A new run starts from scratch.
-10. Tap MENU. Returns to the title screen.
-
-### Common issues
-
-| Symptom | Likely cause |
+| Setting | Value |
 |---|---|
-| Player does not move | `PlayerInputBehavior` missing or joystick not connected |
-| Player falls through walls | Collision layers wrong; walls need layer 2, player mask 2 |
-| Chunks do not spawn | `GCWorldController.source` not set or `GCScrollDriver.chunk_source` null |
-| Score does not update | `ScoreManager.setup()` not called with the scroll driver |
-| Joystick not visible | HUD element not added or `visibility_mode` set to WHEN\_PRESSED |
-| No hit-stop on death | `GCHitStop` not in the scene tree or `died` signal not connected |
-| Parallax not moving | `scroll_offset` not being advanced in `_physics_process` |
+| `default_transition` | `New GCFadeTransition` |
+| `default_transition.duration` | `0.3` |
+| `default_transition.color` | `Color.BLACK` |
+
+Create three `GCScreenDef` resources in `definitions`:
+
+| `id` | `scene` | `transition` | `is_persistent` |
+|---|---|---|---|
+| `&"title"` | `res://scenes/screens/title_screen.tscn` | empty | `false` |
+| `&"gameplay"` | `res://scenes/screens/gameplay_screen.tscn` | empty | `false` |
+| `&"game_over"` | `res://scenes/screens/game_over_screen.tscn` | empty | `false` |
+
+You can keep the per-screen `transition` fields empty because the router
+already has a default fade transition.
+
+If the resource picker still does not show `GCFadeTransition`, save the
+project and reopen it so Godot refreshes the custom resource types.
+
+### Bootstrap service setup
+
+Add this script to `GCBootstrap.service_scripts` in the inspector:
+
+| Script |
+|---|
+| `res://scripts/services/termination_protocol_leaderboard_service.gd` |
+
+`GCBootstrap` derives service ids from filenames, so that file becomes
+`termination_protocol_leaderboard_service`. That is why the game-over
+screen looks up that exact id.
+
+### Autoload setup
+
+In `Project Settings > Autoload`, add:
+
+| Path | Name |
+|---|---|
+| `res://scenes/bootstrap/bootstrap.tscn` | `GCBootstrap` |
+
+The autoload name matters because the screen scripts access the node at
+`/root/GCBootstrap`.
+
+## 10. Optional: add parallax to `game_world.tscn`
+
+If you want the layered city background from the game description, reopen
+`res://scenes/world/game_world.tscn` and add this node above
+`GCWorldController`:
+
+```text
+ParallaxBackground [Node]
+├── DistantCityLayer [Node: ParallaxLayer]
+├── MidBuildingsLayer [Node: ParallaxLayer]
+└── NearStructuresLayer [Node: ParallaxLayer]
+```
+
+Suggested motion scales:
+
+| Layer | `motion_scale` |
+|---|---|
+| `DistantCityLayer` | `Vector2(0.0, 0.1)` |
+| `MidBuildingsLayer` | `Vector2(0.0, 0.3)` |
+| `NearStructuresLayer` | `Vector2(0.0, 0.6)` |
+
+The `TPGameWorld` script from the previous guide already updates
+`ParallaxBackground.scroll_offset.y` if this node exists, so you do not
+need a second script for the background.
+
+## 11. Validate the full loop
+
+Use this checklist:
+
+1. Launch the project and confirm the title screen appears.
+2. Press `PLAY` and confirm the gameplay screen loads.
+3. Confirm the HUD appears above the world, not inside the world scene.
+4. Move with keyboard and with the virtual joystick.
+5. Collect coins or cash and confirm both the score and distance labels
+   update.
+6. Touch a lethal hazard and confirm the game freezes briefly, the camera
+   shakes, and the screen then transitions to game over.
+7. Press `RETRY` and confirm a fresh run starts.
+8. Press `MENU` and confirm you return to the title screen.
+9. If the local leaderboard service is enabled, confirm the game-over
+   screen shows a local rank.

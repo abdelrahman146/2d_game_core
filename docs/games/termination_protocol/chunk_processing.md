@@ -1,101 +1,158 @@
-# Chunk Processing Guide for Endless Runner
+# Chunk Processing Guide
 
-## 1. Create GCChunkData resources for every chunk
+This guide builds the gameplay-side world for Termination Protocol:
+streamed chunks, horizontal player movement, wall-slide speed control,
+and a standalone test scene you can run before wiring title screens and
+HUD. The full screen flow comes later in `core_loop.md`.
 
-For each of your ~50 challenge chunks and ~10 connectors, create a `.tres` resource:
+Everything in this guide has been checked against the current addon
+scripts in `addons/game_core`.
 
-```text
-res://data/chunks/challenge_falling_boxes_01.tres   → GCChunkData
-res://data/chunks/challenge_drones_01.tres          → GCChunkData
-res://data/chunks/connector_bridge_01.tres          → GCChunkData
-...
+## Outcome
+
+By the end of this guide you will have:
+
+1. A reusable `Player` scene.
+2. Chunk scenes and `GCChunkData` resources.
+3. A `GCStreamChunkSource` resource with a custom selector.
+4. A reusable `GameWorld` scene that opens the streamed world.
+5. A small standalone test scene for smoke testing chunk flow.
+
+## Scene tree legend
+
+Use this legend when reading node trees in this guide:
+
+| Marker | Meaning |
+|---|---|
+| `[Node]` | Add this node directly in the current scene in the editor. |
+| `[Scene instance]` | Instantiate another `.tscn` as a child in the editor. |
+| `[Runtime]` | Created by addon code or by your own script at runtime. |
+
+## Recommended paths
+
+These are the paths used below so both guides stay aligned:
+
+| Kind | Path |
+|---|---|
+| Player scene | `res://scenes/actors/player.tscn` |
+| Game world scene | `res://scenes/world/game_world.tscn` |
+| Chunk scenes | `res://scenes/chunks/...` |
+| Chunk data resources | `res://data/chunks/...` |
+| World scripts | `res://scripts/world/...` |
+| Player scripts | `res://scripts/player/...` |
+| Debug test scene | `res://scenes/debug/chunk_processing_test.tscn` |
+
+If you use different paths, keep the references consistent when you copy
+the scripts from this guide.
+
+## 1. Add input actions
+
+Create these actions in `Project Settings > Input Map`:
+
+| Action | Suggested binding |
+|---|---|
+| `move_left` | Left Arrow, `A` |
+| `move_right` | Right Arrow, `D` |
+
+This guide uses keyboard input first. The later core-loop guide wires in
+the virtual joystick without changing the player behavior script.
+
+## 2. Create the game-specific scripts
+
+Create these scripts first so the scenes in later steps can reference
+them directly.
+
+### 2.1 `player_input_behavior.gd`
+
+Save at `res://scripts/player/player_input_behavior.gd`.
+
+Attach this as a child behavior of the player host in step 3.
+
+```gdscript
+extends GCBehavior
+class_name PlayerInputBehavior
+
+@export var joystick: GCVirtualJoystick
+@export var action_left: StringName = &"move_left"
+@export var action_right: StringName = &"move_right"
+
+
+func _init() -> void:
+    phase = Phase.DECIDE
+
+
+func on_physics(host: Node, _delta: float) -> void:
+    var axis := 0.0
+
+    if joystick and joystick.is_pressed:
+        axis = joystick.direction.x
+    else:
+        axis = Input.get_axis(action_left, action_right)
+
+    host.local_state[&"move_direction"] = Vector2(axis, 0.0)
+
+    if axis != 0.0:
+        host.local_state[&"facing_direction"] = 1 if axis > 0.0 else -1
 ```
 
-Inspector config per resource:
+### 2.2 `wall_slide_detector.gd`
 
-| Property | Example (challenge) | Example (connector) |
-| ---------- | ------------------- | ------------------- |
-| `scene` | your chunk PackedScene | your connector PackedScene |
-| `category` | `&"falling_boxes"` | `&"connector_bridge"` |
-| `difficulty` | `0.3` | `0.0` |
-| `length` | `640.0` (in pixels, how tall the chunk is) | `256.0` |
-| `is_connector` | `false` | `true` |
-| `tags` | `[&"no_platforms"]` | `[&"scenic"]` |
-| `connects_from` | `[]` (any predecessor) | `[&"falling_boxes", &"drones"]` |
-| `connects_to` | `[]` | `[&"gates", &"patrol"]` |
+Save at `res://scripts/player/wall_slide_detector.gd`.
 
-## 2. Create your chunk scenes
+Attach this as a child behavior of the player host in step 3.
 
-Each chunk scene is a **Node2D** root containing:
+Leave `scroll_driver_path` empty when the player is an instanced child
+scene of `GameWorld`. The script already searches upward for a sibling
+`GCScrollDriver`.
 
-```text
-ChunkRoot (Node2D)
-├── TileMapLayer          ← platforms, walls (32×32 tiles)
-├── Hazard1 (GCStaticHost2D / GCAreaHost2D)  ← game-specific hazards
-├── Enemy1 (GCCharacterHost2D)               ← using addon behaviors
-│   ├── CollisionShape2D
-│   ├── Sprite2D
-│   ├── GCPatrolBehavior
-│   ├── GCDetectTarget
-│   └── GCHealth
-└── Spawner (Node2D)      ← for dynamic spawns within the chunk
+```gdscript
+extends GCBehavior
+class_name WallSlideDetector
+
+@export_range(0.1, 1.0, 0.05) var slide_speed_modifier := 0.5
+@export var scroll_driver_path: NodePath
+
+var _driver: GCScrollDriver
+var _is_sliding := false
+
+
+func _init() -> void:
+    phase = Phase.SENSE
+
+
+func on_host_ready(host: Node) -> void:
+    if not scroll_driver_path.is_empty():
+        _driver = host.get_node_or_null(scroll_driver_path) as GCScrollDriver
+    if _driver != null:
+        return
+
+    var node := host.get_parent()
+    while node:
+        for child in node.get_children():
+            if child is GCScrollDriver:
+                _driver = child
+                return
+        node = node.get_parent()
+
+
+func on_physics(host: Node, _delta: float) -> void:
+    if _driver == null or not (host is CharacterBody2D):
+        return
+
+    var sliding := (host as CharacterBody2D).is_on_wall()
+    if sliding == _is_sliding:
+        return
+
+    _is_sliding = sliding
+    _driver.apply_speed_modifier(slide_speed_modifier if sliding else 1.0)
 ```
 
-The chunk's **origin is its top edge** (y=0). Content extends downward (positive Y). The `length` in `GCChunkData` should match the total height of the chunk content.
+### 2.3 `runner_chunk_selector.gd`
 
-## 3. Scene tree for the game world
+Save at `res://scripts/world/runner_chunk_selector.gd`.
 
-```text
-GameWorld (Node2D)
-├── GCWorldController
-│   └── (ChunkRoot auto-created by GCStreamChunkSource)
-│       ├── Chunk0 (Node2D, instantiated)
-│       ├── Chunk1 (Node2D, instantiated)
-│       └── Chunk2 (Node2D, instantiated)
-├── GCScrollDriver
-├── BoundaryWalls (StaticBody2D)   ← the two vertical walls
-│   ├── LeftWall (CollisionShape2D)
-│   └── RightWall (CollisionShape2D)
-├── Player (GCCharacterHost2D)
-│   ├── CollisionShape2D
-│   ├── Sprite2D / AnimatedSprite2D
-│   ├── GCSimpleMovement (default_speed=200)
-│   ├── GCHealth
-│   ├── GCAnimationBehavior
-│   ├── GCFacing
-│   └── WallSlideDetector.gd  ← game-specific (see below)
-└── GCCamera2D (mode=FIXED, centered on corridor)
-```
-
-## 4. Configure GCWorldController
-
-- **Inspector**: Set `source` to a `GCStreamChunkSource` resource
-- The stream chunk source resource exports:
-
-| Property | Value |
-| ---------- | ------- |
-| `chunks` | Array of all your challenge `GCChunkData` resources |
-| `connectors` | Array of all your connector `GCChunkData` resources |
-| `selector` | Your custom `RunnerChunkSelector.tres` (see step 6) |
-| `buffer_between` | `64.0` (pixels gap between chunks) |
-| `connector_interval` | `4` (connector every 4 challenge chunks) |
-| `lookahead_count` | `3` |
-| `trail_count` | `1` |
-
-## 5. Configure GCScrollDriver
-
-| Property | Value |
-| ---------- | ------- |
-| `base_speed` | `80.0` (starting scroll speed) |
-| `acceleration` | `1.5` (speed increase per second) |
-| `max_speed` | `300.0` |
-| `direction` | `Vector2.UP` (chunks scroll upward) |
-| `chunk_source` | Same `GCStreamChunkSource` resource |
-| `viewport_scroll_size` | Your viewport height (e.g., `640.0`) |
-
-## 6. Write your custom chunk selector (game-specific)
-
-This is the logic that controls chunk variety, difficulty ramp, and anti-repetition. Save at `res://scripts/runner_chunk_selector.gd`:
+This is the game-specific piece that biases chunk selection by recent
+history and by the difficulty cursor exposed by `GCStreamChunkSource`.
 
 ```gdscript
 extends GCChunkSelector
@@ -104,249 +161,351 @@ class_name RunnerChunkSelector
 @export var max_repeat_category := 2
 @export var difficulty_window := 0.3
 
+
 func select_next(pool: Array, history: Array[StringName], context: Dictionary) -> Resource:
- var filtered := filter_pool(pool, history, context)
- if filtered.is_empty():
-  filtered = pool
- if filtered.is_empty():
-  return null
+    var filtered := filter_pool(pool, history, context)
+    if filtered.is_empty():
+        filtered = pool
+    if filtered.is_empty():
+        return null
 
- # Weight by difficulty proximity to current cursor
- var cursor: float = context.get(&"difficulty_cursor", 0.0)
- var weighted: Array = []
- var weights: Array[float] = []
- for chunk in filtered:
-  var diff: float = absf(chunk.difficulty - cursor)
-  if diff <= difficulty_window:
-   weighted.append(chunk)
-   weights.append(1.0 / (diff + 0.1))
+    var cursor: float = context.get(&"difficulty_cursor", 0.0)
+    var weighted: Array = []
+    var weights: Array[float] = []
 
- if weighted.is_empty():
-  return filtered[randi() % filtered.size()]
+    for chunk in filtered:
+        var diff: float = absf(chunk.difficulty - cursor)
+        if diff <= difficulty_window:
+            weighted.append(chunk)
+            weights.append(1.0 / (diff + 0.1))
 
- return _weighted_pick(weighted, weights)
+    if weighted.is_empty():
+        return filtered[randi() % filtered.size()]
+
+    return _weighted_pick(weighted, weights)
 
 
-func filter_pool(pool: Array, history: Array[StringName], _context: Dictionary) -> Array:
- var result := super.filter_pool(pool, history, _context)
- if history.size() < max_repeat_category:
-  return result
- # Remove chunks whose category appeared too recently
- var recent: Array[StringName] = []
- for i in range(max(0, history.size() - max_repeat_category), history.size()):
-  recent.append(history[i])
- var final: Array = []
- for chunk in result:
-  if not recent.has(chunk.category):
-   final.append(chunk)
- return final if not final.is_empty() else result
+func filter_pool(pool: Array, history: Array[StringName], context: Dictionary) -> Array:
+    var result: Array = super.filter_pool(pool, history, context)
+    if history.size() < max_repeat_category:
+        return result
+
+    var recent: Array[StringName] = []
+    for index in range(max(0, history.size() - max_repeat_category), history.size()):
+        recent.append(history[index])
+
+    var final: Array = []
+    for chunk in result:
+        if not recent.has(chunk.category):
+            final.append(chunk)
+
+    return final if not final.is_empty() else result
 
 
 func _weighted_pick(items: Array, weights: Array[float]) -> Resource:
- var total := 0.0
- for w in weights:
-  total += w
- var roll := randf() * total
- var running := 0.0
- for i in range(items.size()):
-  running += weights[i]
-  if roll <= running:
-   return items[i]
- return items.back()
+    var total := 0.0
+    for weight in weights:
+        total += weight
+
+    var roll := randf() * total
+    var running := 0.0
+
+    for index in range(items.size()):
+        running += weights[index]
+        if roll <= running:
+            return items[index]
+
+    return items.back()
 ```
 
-## 7. Write the wall-slide detector (game-specific)
+### 2.4 `game_world.gd`
 
-This behavior detects wall contact and modifies scroll speed. Add as a child of the player host:
+Save at `res://scripts/world/game_world.gd`.
 
-```gdscript
-extends GCBehavior
-class_name WallSlideDetector
+Attach this to the root of `game_world.tscn` in step 6.
 
-@export var slide_speed_modifier := 0.5
-@export var scroll_driver_path: NodePath
-
-var _driver: GCScrollDriver
-var _is_sliding := false
-
-
-func _init() -> void:
- phase = Phase.SENSE
-
-
-func on_host_ready(host: Node) -> void:
- if not scroll_driver_path.is_empty():
-  _driver = host.get_node_or_null(scroll_driver_path) as GCScrollDriver
- if _driver == null:
-  # Search up the tree
-  var node := host.get_parent()
-  while node:
-   for child in node.get_children():
-    if child is GCScrollDriver:
-     _driver = child
-     return
-   node = node.get_parent()
-
-
-func on_physics(host: Node, _delta: float) -> void:
- if _driver == null:
-  return
- if not host is CharacterBody2D:
-  return
- var body := host as CharacterBody2D
- var sliding := body.is_on_wall()
- if sliding and not _is_sliding:
-  _is_sliding = true
-  _driver.apply_speed_modifier(slide_speed_modifier)
- elif not sliding and _is_sliding:
-  _is_sliding = false
-  _driver.apply_speed_modifier(1.0)
-```
-
-## 8. Player scene setup
-
-```text
-Player (GCCharacterHost2D)
-├── CollisionShape2D (RectangleShape2D, e.g. 24×28)
-├── AnimatedSprite2D
-├── GCSimpleMovement
-│   └── default_speed = 200
-├── GCHealth
-│   └── max_health = 1  (one-hit death for an endless runner)
-├── GCFacing
-├── GCAnimationBehavior
-└── WallSlideDetector
-    └── slide_speed_modifier = 0.5
-```
-
-**Player input script** (game-specific, set on the player host or as a DECIDE behavior):
-
-```gdscript
-extends GCBehavior
-
-func _init() -> void:
- phase = Phase.DECIDE
-
-func on_physics(host: Node, _delta: float) -> void:
- var dir := Input.get_axis(&"move_left", &"move_right")
- host.local_state[&"move_direction"] = Vector2(dir, 0)
- if dir != 0.0:
-  host.local_state[&"facing_direction"] = 1 if dir > 0 else -1
-```
-
-## 9. Game world script (ties it all together)
-
-Attach to the GameWorld root node:
+This wrapper keeps the chunk world reusable: you can open it from a
+standalone debug scene now, and later from `GameplayScreen` in
+`core_loop.md`.
 
 ```gdscript
 extends Node2D
+class_name TPGameWorld
 
-@export var world_controller_path: NodePath
-@export var scroll_driver_path: NodePath
+@onready var world_controller := get_node("GCWorldController") as GCWorldController
+@onready var scroll_driver := get_node("GCScrollDriver") as GCScrollDriver
+@onready var player := get_node("Player") as GCCharacterHost2D
+@onready var camera := get_node("GCCamera2D") as GCCamera2D
+@onready var parallax := get_node_or_null("ParallaxBackground") as ParallaxBackground
 
-@onready var world_controller: GCWorldController = get_node(world_controller_path)
-@onready var scroll_driver: GCScrollDriver = get_node(scroll_driver_path)
+
+func open_with_context(game_context: GCGameContext) -> void:
+    world_controller.configure(game_context)
+    world_controller.open_world()
+
+
+func close_world() -> void:
+    world_controller.close_world()
+    scroll_driver.reset()
+
+
+func get_chunk_source() -> GCStreamChunkSource:
+    return scroll_driver.chunk_source as GCStreamChunkSource
+
+
+func get_player_input() -> PlayerInputBehavior:
+    for child in player.get_children():
+        if child is PlayerInputBehavior:
+            return child
+    return null
+
+
+func get_player_health() -> GCHealth:
+    for child in player.get_children():
+        if child is GCHealth:
+            return child
+    return null
+
+
+func _physics_process(delta: float) -> void:
+    if parallax and scroll_driver.active:
+        parallax.scroll_offset.y -= scroll_driver.current_speed * delta
+```
+
+## 3. Create the player scene
+
+Create `res://scenes/actors/player.tscn` with this tree:
+
+```text
+Player [Scene root: GCCharacterHost2D]
+├── CollisionShape2D [Node]
+├── Sprite2D [Node]
+├── AnimationPlayer [Node]
+├── PlayerInputBehavior [Node, script: res://scripts/player/player_input_behavior.gd]
+├── GCSimpleMovement [Node]
+├── GCHealth [Node]
+├── GCFacing [Node]
+├── GCAnimationBehavior [Node]
+└── WallSlideDetector [Node, script: res://scripts/player/wall_slide_detector.gd]
+```
+
+### Player settings
+
+Set these values in the inspector:
+
+| Node | Setting | Value |
+|---|---|---|
+| `Player` | Groups | add `player` and `damageable` |
+| `Player` | Collision Layer | `Player` |
+| `Player` | Collision Mask | `Walls`, `Hazards` |
+| `CollisionShape2D` | Shape | `RectangleShape2D`, for example `24 x 28` |
+| `GCSimpleMovement` | `default_speed` | `200` |
+| `GCHealth` | `max_health` | `1` |
+| `GCHealth` | `invincibility_time` | `0.0` |
+| `GCFacing` | `flip_sprite` | `true` |
+| `GCAnimationBehavior` | `idle_animation` | `"idle"` |
+| `GCAnimationBehavior` | `move_animation` | `"move"` |
+| `GCAnimationBehavior` | `death_animation` | `"death"` |
+| `GCAnimationBehavior` | `hit_animation` | `"hit"` or empty string |
+| `WallSlideDetector` | `slide_speed_modifier` | `0.5` |
+| `WallSlideDetector` | `scroll_driver_path` | leave empty |
+
+### Important animation note
+
+`GCAnimationBehavior` drives an `AnimationPlayer`, not an
+`AnimatedSprite2D`. If you only want `AnimatedSprite2D`, remove
+`GCAnimationBehavior` and animate that sprite yourself.
+
+## 4. Create the chunk scenes
+
+Each chunk scene should be a plain `Node2D` root. The stream source will
+instantiate these scenes at runtime.
+
+Use this authoring rule for all chunk scenes:
+
+1. The scene root starts at the top edge of the chunk.
+2. Content extends downward along positive `Y`.
+3. `GCChunkData.length` must match the chunk height along that axis.
+
+Base pattern:
+
+```text
+ChunkName [Scene root: Node2D]
+├── Geometry [Node]
+│   ├── TileMapLayer [Node]
+│   └── Static platforms / walls [Nodes]
+├── Hazards [Node]
+├── Enemies [Node]
+└── Pickups [Node]
+```
+
+For this guide, create at least these three scenes:
+
+| Scene | Purpose |
+|---|---|
+| `res://scenes/chunks/challenge_01.tscn` | First challenge chunk |
+| `res://scenes/chunks/challenge_02.tscn` | Second challenge chunk |
+| `res://scenes/chunks/connector_01.tscn` | Low-pressure connector chunk |
+
+### Hazard pattern that works with `GCDamage`
+
+If a chunk hazard should kill the player on contact, use this shape:
+
+```text
+Hazard [Node root: GCStaticHost2D]
+├── CollisionShape2D [Node]
+├── DamageArea [Node: Area2D]
+│   └── CollisionShape2D [Node]
+└── GCDamage [Node]
+```
+
+Use these settings:
+
+| Node | Setting | Value |
+|---|---|---|
+| `DamageArea` | Collision Layer | `Hazards` |
+| `DamageArea` | Collision Mask | `Player` |
+| `GCDamage` | `damage` | `1` |
+| `GCDamage` | `damage_group` | `&"damageable"` |
+
+The `damageable` group on the player is required because `GCDamage`
+checks groups, not `entity_tags`.
+
+## 5. Create the chunk data resources
+
+Create one `GCChunkData` resource per chunk scene.
+
+Suggested paths:
+
+```text
+res://data/chunks/challenge_01.tres
+res://data/chunks/challenge_02.tres
+res://data/chunks/connector_01.tres
+```
+
+Configure each resource like this:
+
+| Property | Challenge example | Connector example |
+|---|---|---|
+| `scene` | `challenge_01.tscn` | `connector_01.tscn` |
+| `category` | `&"challenge_basic"` | `&"connector_breath"` |
+| `difficulty` | `0.2` to `0.4` | `0.0` |
+| `length` | actual chunk height in pixels, for example `640.0` | actual connector height, for example `256.0` |
+| `is_connector` | `false` | `true` |
+| `tags` | optional | optional |
+| `connects_from` | leave empty unless you need strict sequencing | optional |
+| `connects_to` | leave empty unless you need strict sequencing | optional |
+
+## 6. Create the selection resources
+
+Create these two resources:
+
+| Resource | Suggested path | Type |
+|---|---|---|
+| Chunk selector | `res://data/chunks/runner_chunk_selector.tres` | `RunnerChunkSelector` |
+| Stream source | `res://data/chunks/termination_protocol_stream_source.tres` | `GCStreamChunkSource` |
+
+### `runner_chunk_selector.tres`
+
+Set these values:
+
+| Property | Value |
+|---|---|
+| `max_repeat_category` | `2` |
+| `difficulty_window` | `0.3` |
+
+### `termination_protocol_stream_source.tres`
+
+Set these values:
+
+| Property | Value |
+|---|---|
+| `chunks` | add all challenge `GCChunkData` resources |
+| `connectors` | add all connector `GCChunkData` resources |
+| `selector` | `runner_chunk_selector.tres` |
+| `buffer_between` | `64.0` |
+| `connector_interval` | `4` |
+| `lookahead_count` | `3` |
+| `trail_count` | `1` |
+
+## 7. Create the `GameWorld` scene
+
+Create `res://scenes/world/game_world.tscn` with this tree:
+
+```text
+GameWorld [Scene root: Node2D, script: res://scripts/world/game_world.gd]
+├── GCWorldController [Node]
+│   └── ChunkRoot [Runtime: created by GCStreamChunkSource]
+│       ├── Challenge chunk [Runtime scene instance]
+│       └── Connector chunk [Runtime scene instance]
+├── GCScrollDriver [Node]
+├── BoundaryWalls [Node root: StaticBody2D]
+│   ├── LeftWall [Node: CollisionShape2D]
+│   └── RightWall [Node: CollisionShape2D]
+├── Player [Scene instance: res://scenes/actors/player.tscn]
+└── GCCamera2D [Node]
+```
+
+### `GameWorld` settings
+
+| Node | Setting | Value |
+|---|---|---|
+| `GCWorldController` | `source` | `termination_protocol_stream_source.tres` |
+| `GCScrollDriver` | `chunk_source` | `termination_protocol_stream_source.tres` |
+| `GCScrollDriver` | `base_speed` | `80.0` |
+| `GCScrollDriver` | `acceleration` | `1.5` |
+| `GCScrollDriver` | `max_speed` | `300.0` |
+| `GCScrollDriver` | `direction` | `Vector2.UP` |
+| `GCScrollDriver` | `viewport_scroll_size` | your visible world height in pixels |
+| `GCCamera2D` | `mode` | `FIXED` |
+| `BoundaryWalls` | Collision Layer | `Walls` |
+| `BoundaryWalls` | Collision Mask | usually empty |
+
+### Boundary wall note
+
+The wall-slide behavior depends on `CharacterBody2D.is_on_wall()`, so the
+left and right corridor walls must be real physics walls on the `Walls`
+layer. Make sure the player collides with them.
+
+## 8. Create a standalone smoke-test scene
+
+Create `res://scenes/debug/chunk_processing_test.tscn` with this tree:
+
+```text
+ChunkProcessingTest [Scene root: Node, script: res://scripts/debug/chunk_processing_test.gd]
+└── GameWorld [Scene instance: res://scenes/world/game_world.tscn]
+```
+
+Create `res://scripts/debug/chunk_processing_test.gd`:
+
+```gdscript
+extends Node
+
+@onready var game_world := get_node("GameWorld") as TPGameWorld
+var _context := GCGameContext.new()
+
 
 func _ready() -> void:
- var context := GCGameContext.new()
- world_controller.configure(context)
- world_controller.open_world()
- # Scroll driver auto-finds the chunk root from sibling GCWorldController
+    game_world.open_with_context(_context)
+
+
+func _exit_tree() -> void:
+    game_world.close_world()
 ```
 
-## 10. Chunk archetype examples
+Temporarily run this scene as the main scene while you validate chunk
+streaming in isolation.
 
-**Falling boxes chunk:**
+## 9. Validate this guide before moving on
 
-```text
-FallingBoxesChunk (Node2D)
-├── TileMapLayer              ← side walls only (scrolling walls)
-└── BoxSpawner (GCAreaHost2D)
-    └── GCSpawner
-        ├── spawn_scene = RigidBox.tscn
-        ├── spawn_on_timer = true
-        ├── timer_interval = 0.8
-        └── max_spawns = 15
-```
+Use this checklist:
 
-**Drone chunk:**
+1. The player moves left and right with the keyboard.
+2. Touching the left or right corridor wall slows the scroll speed.
+3. At least two challenge chunks and one connector chunk appear over
+   time.
+4. Old chunks disappear after they pass above the visible play area.
+5. Hazards that use `GCDamage` kill the player in one hit.
 
-```text
-DroneChunk (Node2D)
-├── TileMapLayer
-└── Drone (GCCharacterHost2D)
-    ├── CollisionShape2D
-    ├── Sprite2D
-    ├── GCDetectTarget (detect_group=&"player", use_area=true)
-    │   └── DetectionArea (Area2D + CollisionShape2D)
-    ├── GCShoot (projectile_scene=Bomb.tscn, auto_fire=true, cooldown=2.0)
-    └── GCHealth
-```
-
-**Patrol enemy chunk:**
-
-```text
-PatrolChunk (Node2D)
-├── TileMapLayer
-└── PatrolEnemy (GCCharacterHost2D)
-    ├── CollisionShape2D
-    ├── Sprite2D
-    ├── GCPatrolBehavior (patrol_mode=RANGE, speed=40, patrol_distance=80)
-    ├── GCSimpleMovement
-    ├── GCHealth
-    └── GCDamage
-```
-
-**Gate hazard chunk** (game-specific script):
-
-```text
-GateChunk (Node2D)
-├── TileMapLayer
-└── Gate (GCStaticHost2D)
-    ├── CollisionShape2D
-    ├── AnimatedSprite2D
-    ├── AnimationPlayer     ← open/close animation
-    └── GateHazard.gd      ← game-specific: timer-based open/close, kills on close
-```
-
-## 11. Local state flow
-
-```text
-[WallSlideDetector] SENSE: reads is_on_wall() → calls scroll_driver.apply_speed_modifier()
-    ↓
-[PlayerInput] DECIDE: reads Input → writes move_direction, facing_direction
-    ↓
-[GCSimpleMovement] ACT: reads move_direction, speed → body.velocity.x, move_and_slide()
-    ↓
-[GCFacing] PRESENT: reads facing_direction → flips sprite
-
-[GCScrollDriver] _physics_process: moves all chunk children upward by speed * delta
-    ↓
-[GCStreamChunkSource] update(): spawns new chunks ahead, despawns old chunks behind
-```
-
-## 12. Collision layers recommendation
-
-| Layer | Bit | Used by |
-| ------- | ----- | --------- |
-| Player | 1 | Player body |
-| Walls | 2 | Boundary walls, tilemap platforms |
-| Enemies | 3 | Enemy bodies |
-| Projectiles | 4 | Bombs, bullets |
-| Hazards | 5 | Gates, robot arms, deadly floors |
-| Detection | 6 | Detection areas (drone sensing) |
-| Collectibles | 7 | Pickups, score items |
-
-## 13. Testing the feature
-
-1. Create 2–3 simple chunk scenes (plain Node2D with a ColorRect or Sprite2D so you can see them)
-2. Create `GCChunkData` resources pointing to those scenes with different lengths
-3. Set up the GameWorld tree from step 3
-4. Run — you should see chunks spawning below and scrolling upward
-5. Move player left/right — confirm X movement works
-6. Touch a wall — confirm scroll speed drops to 50%
-7. Check that chunks despawn above the viewport (monitor node count in the debugger)
-
-Completed: *Deliver integration guide* (8/8)
-
-Made changes.
+Once those work, continue with `core_loop.md` for the HUD, joystick,
+title screen, game-over screen, and leaderboard flow.

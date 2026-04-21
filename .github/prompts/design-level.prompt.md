@@ -294,29 +294,35 @@ Deliver a precise, step-by-step guide for building the design unit in Godot usin
 
 ### Scene structure
 
-Show the scene tree for the design unit:
+Show the scene tree for the design unit using this strict legend to avoid ambiguity between editor nodes and runtime nodes:
+
+| Marker | Meaning |
+|---|---|
+| `[Node]` | Add this node directly in the current scene in the editor. |
+| `[Scene instance]` | Instantiate another `.tscn` as a child in the editor. |
+| `[Runtime]` | Created by addon code or by your own script at runtime. |
 
 ```text
-LevelRoot (Node2D)
-├── TileMapLayer (terrain, platforms, walls)
-├── Entities
-│   ├── PlayerSpawn (Marker2D)
-│   ├── Enemy_01 (GCCharacterHost2D)
-│   │   ├── CollisionShape2D
-│   │   ├── Sprite2D
-│   │   ├── GCPatrolBehavior
-│   │   └── GCHealth
-│   ├── Collectible_01 (GCAreaHost2D)
-│   │   ├── CollisionShape2D
-│   │   ├── Sprite2D
-│   │   └── GCCollectible
+LevelRoot [Scene root: Node2D]
+├── TileMapLayer [Node] (terrain, platforms, walls)
+├── Entities [Node]
+│   ├── PlayerSpawn [Node: Marker2D]
+│   ├── Enemy_01 [Scene instance: res://...]
+│   │   ├── CollisionShape2D [Node]
+│   │   ├── Sprite2D [Node]
+│   │   ├── GCPatrolBehavior [Node, script: res://...]
+│   │   └── GCHealth [Node]
+│   ├── Collectible_01 [Scene instance: res://...]
+│   │   ├── CollisionShape2D [Node]
+│   │   ├── Sprite2D [Node]
+│   │   └── GCCollectible [Node]
 │   └── ...
-├── Hazards
-│   ├── Spikes (StaticBody2D)
+├── Hazards [Node]
+│   ├── Spikes [Scene instance: res://...]
 │   └── ...
-├── Triggers
-│   └── ExitZone (Area2D)
-└── Background (ParallaxBackground)
+├── Triggers [Node]
+│   └── ExitZone [Node: Area2D]
+└── Background [Node: ParallaxBackground]
 ```
 
 Adapt the structure to the game type. Not every design unit is a tiled level — for a card table, wave arena, or quiz screen, use whatever scene structure fits.
@@ -329,6 +335,7 @@ For each significant node, list:
 - Export property values to set
 - Collision layers and masks
 - Resource assignments
+- Required Groups (CRITICAL: e.g., `damageable` for `GCDamage`, `player` for `GCCollectible`)
 
 ### Entity scenes
 
@@ -411,3 +418,10 @@ After the implementation guide is complete and the user is satisfied:
 - Reference real class names from the addon, not hypothetical ones.
 - When showing scripts, use GDScript with tabs for indentation, matching the project style.
 - Confirm the design concept before moving to implementation. Don't over-build before the user agrees on the vision.
+
+## Common Pitfalls to Avoid
+
+- **Transitions**: The router takes `GCTransition` resources (like `GCFadeTransition` or `GCSlideTransition`). Recommend creating them inline via `New GCFadeTransition` in the inspector unless reuse via a `.tres` is explicitly needed. Do not use scenes as transitions.
+- **Animations**: `GCAnimationBehavior` requires an `AnimationPlayer` node. It does not work with `AnimatedSprite2D`.
+- **Groups**: Mention required groups explicitly. For example, `GCDamage` requires the target to be in the `damageable` group, and `GCCollectible` requires the collector to be in the `player` group (or whatever is configured).
+- **Bootstrap API**: Avoid `GCBootstrap.instance` (it doesn't exist). If creating a router/HUD setup, autoload a `bootstrap.tscn` scene, not the script. Access it via `/root/GCBootstrap`.

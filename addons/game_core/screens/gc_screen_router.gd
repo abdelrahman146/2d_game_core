@@ -5,12 +5,11 @@ class_name GCScreenRouter
 
 const _ScreenDef = preload("res://addons/game_core/screens/gc_screen_def.gd")
 const _Screen = preload("res://addons/game_core/screens/gc_screen.gd")
-const _Transition = preload("res://addons/game_core/screens/transitions/gc_transition.gd")
 
 signal screen_changed(screen_id: StringName)
 
 @export var definitions: Array[_ScreenDef] = []
-@export var default_transition: _Transition
+@export var default_transition: GCTransition
 
 var context: GCGameContext
 var current_screen: _Screen
@@ -60,7 +59,7 @@ func _navigate_to(screen_id: StringName, payload: Dictionary) -> void:
 		push_error("GCScreenRouter: No screen defined for id '%s'." % screen_id)
 		return
 
-	var transition: _Transition = def.transition if def.transition else default_transition
+	var transition: GCTransition = def.transition if def.transition else default_transition
 	_is_transitioning = true
 
 	if transition and current_screen:

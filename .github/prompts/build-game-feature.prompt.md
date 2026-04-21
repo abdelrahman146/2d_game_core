@@ -167,18 +167,24 @@ Deliver a numbered, precise guide the user can follow to build their feature. St
 
 ### Scene structure
 
-Show the exact scene tree the user should create:
+Show the exact scene tree the user should create, using this legend to avoid ambiguity between editor nodes and runtime nodes:
 
-```
-RootHostNode (type)
-├── CollisionShape2D
-├── Sprite2D / AnimatedSprite2D
-├── BehaviorNode1 (exports to set)
-├── BehaviorNode2 (exports to set)
-├── RayCast2D (if needed by sensors)
-├── Area2D (if needed by detection/damage)
-│   └── CollisionShape2D
-└── AnimationPlayer (if needed)
+| Marker | Meaning |
+|---|---|
+| `[Node]` | Add this node directly in the current scene in the editor. |
+| `[Scene instance]` | Instantiate another `.tscn` as a child in the editor. |
+| `[Runtime]` | Created by addon code or by your own script at runtime. |
+
+```text
+RootHostNode [Scene root: type]
+├── CollisionShape2D [Node]
+├── Sprite2D [Node]
+├── AnimationPlayer [Node] (Required if using GCAnimationBehavior)
+├── BehaviorNode1 [Node, script: res://...]
+├── BehaviorNode2 [Node]
+├── RayCast2D [Node]
+└── Area2D [Node]
+    └── CollisionShape2D [Node]
 ```
 
 ### Inspector configuration
@@ -187,6 +193,7 @@ For each node, list the exact export values to set:
 - Node type and name
 - Each export property and its value
 - Collision layers and masks
+- Required Groups (CRITICAL: Mention if groups like `damageable` or `player` are needed by behaviors like `GCDamage` or `GCCollectible`).
 
 ### Supporting scenes
 
@@ -263,3 +270,12 @@ After the integration guide is complete and any addon changes have passed valida
 - Use Godot-native patterns: scene tree composition, inspector configuration, signals, collision layers.
 - Reference real class names from the addon, not hypothetical ones.
 - When showing scripts, use GDScript with tabs for indentation, matching the project style.
+
+## Common Pitfalls to Avoid
+
+- **Bootstrap Autoload**: If the user needs `GCHudLayer` or `GCScreenRouter`, they must create a `bootstrap.tscn` scene with `GCBootstrap` as the root and those nodes as children, then autoload the *scene*. Do not autoload the `.gd` script directly. Access the bootstrap node via `/root/GCBootstrap`. There is no `GCBootstrap.instance`.
+- **Services**: `GCService` extends `RefCounted`, not `Node`. Do not call `add_child()` or use timers inside a service without a valid node reference.
+- **HUD**: `GCHudLayer` is the persistent container. Add your actual HUD UI scene (like `game_hud.tscn`) into it at runtime using `add_element()`.
+- **Transitions**: The router takes `GCTransition` resources (like `GCFadeTransition` or `GCSlideTransition`). Recommend creating them inline via `New GCFadeTransition` in the inspector unless reuse via a `.tres` is explicitly needed. Do not use scenes as transitions.
+- **Animations**: `GCAnimationBehavior` requires an `AnimationPlayer` node. It does not work with `AnimatedSprite2D`.
+- **Groups**: Mention required groups explicitly. For example, `GCDamage` requires the target to be in the `damageable` group, and `GCCollectible` requires the collector to be in the `player` group (or whatever is configured).
