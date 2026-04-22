@@ -35,7 +35,7 @@ func on_physics(host: Node, delta: float) -> void:
 		return
 	if not _can_auto_drop(host):
 		return
-		drop(host)
+	drop(host)
 
 
 func drop(host: Node) -> void:
