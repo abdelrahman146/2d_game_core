@@ -335,8 +335,12 @@ A starter set of behaviors that ship with the core. You can use them as-is or as
 
 ### Combat & Actions
 
-- **GCShootBehavior** — Spawn a projectile on a cooldown. Configurable direction, speed, scene.
+- **GCShootBehavior** — Spawn a projectile on a cooldown. Supports
+   target-detected or timer-based auto fire, plus optional local-state
+   gating.
 - **GCDropBehavior** — Drop an object (bomb, item) when condition met.
+   Supports target-detected or timer-based auto drop, plus optional
+   local-state gating.
 - **GCDamageBehavior** — Deal damage on overlap or hit.
 - **GCHealthBehavior** — Track health, handle damage, emit death signal.
 - **GCKnockbackBehavior** — Apply knockback force on hit.
@@ -555,7 +559,7 @@ addons/game_core/
    - **GCWallSensor**
    - **GCSimpleMovement**
    - **GCDetectTargetBehavior** — detect player below.
-   - **GCDropBehavior** — drop bomb scene when target detected.
+   - **GCDropBehavior** — drop bomb scene when target detected or on timer.
    - **GCFacingBehavior**
 3. Done.
 
