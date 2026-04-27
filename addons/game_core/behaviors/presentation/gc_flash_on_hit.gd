@@ -17,9 +17,9 @@ func _init() -> void:
 
 
 func on_host_ready(host: Node) -> void:
-	var sprite := _get_sprite(host)
-	if sprite:
-		_original_modulate = sprite.modulate
+	var visual := _get_visual(host)
+	if visual:
+		_original_modulate = visual.modulate
 	for child in host.get_children():
 		if child is _Health:
 			(child as _Health).damaged.connect(_on_damaged.bind(host))
@@ -27,25 +27,29 @@ func on_host_ready(host: Node) -> void:
 
 
 func _on_damaged(_amount: int, _source: Node, host: Node) -> void:
-	var sprite := _get_sprite(host)
-	if sprite == null:
+	var visual := _get_visual(host)
+	if visual == null:
 		return
-	_do_flash(sprite)
+	_do_flash(visual)
 
 
-func _do_flash(sprite: Sprite2D) -> void:
-	var tween := sprite.get_tree().create_tween()
+func _do_flash(visual: CanvasItem) -> void:
+	var tween := visual.get_tree().create_tween()
 	for i in range(flash_count):
-		tween.tween_property(sprite, "modulate", flash_color, flash_duration * 0.5)
-		tween.tween_property(sprite, "modulate", _original_modulate, flash_duration * 0.5)
+		tween.tween_property(visual, "modulate", flash_color, flash_duration * 0.5)
+		tween.tween_property(visual, "modulate", _original_modulate, flash_duration * 0.5)
 
 
-func _get_sprite(host: Node) -> Sprite2D:
+func _get_visual(host: Node) -> CanvasItem:
 	if not sprite_path.is_empty():
 		var node := host.get_node_or_null(sprite_path)
-		if node is Sprite2D:
-			return node as Sprite2D
+		if _supports_flash(node):
+			return node as CanvasItem
 	for child in host.get_children():
-		if child is Sprite2D:
-			return child as Sprite2D
+		if _supports_flash(child):
+			return child as CanvasItem
 	return null
+
+
+func _supports_flash(node: Node) -> bool:
+	return node is Sprite2D or node is AnimatedSprite2D

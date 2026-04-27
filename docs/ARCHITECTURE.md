@@ -1,3 +1,5 @@
+<!-- markdownlint-disable MD013 -->
+
 # Game Core Architecture
 
 A reusable Godot 4 addon that makes 2D game development faster by giving you ready-made foundations you compose together. You still work in Godot the normal way — scenes, inspector, signals, collision layers, scene tree — but with powerful reusable pieces already built for you.
@@ -351,7 +353,8 @@ A starter set of behaviors that ship with the core. You can use them as-is or as
 - **GCInteractableBehavior** — Respond to player interaction (press button near door/NPC).
 - **GCSpawnerBehavior** — Spawn entities on timer, signal, or condition.
 - **GCDestroyOnHitBehavior** — Remove self after taking damage or on signal.
-- **GCAnimationBehavior** — Play animations based on local state changes.
+- **GCAnimationBehavior** — Play the current `animation_state` / `animation_trigger` contract on an `AnimationPlayer`.
+- **GCAnimatedSpriteBehavior** — Play the same `animation_state` / `animation_trigger` contract on an `AnimatedSprite2D`.
 
 ### Physics & Constraints
 
@@ -578,7 +581,7 @@ addons/game_core/
 1. Root: **GCAreaHost2D**.
 2. Add:
    - **GCCollectibleBehavior** — reward type: coin, amount: 1.
-   - **GCAnimationBehavior** — idle spin animation.
+   - **GCAnimationBehavior** or **GCAnimatedSpriteBehavior** — set `default_state` to `spin`, or write `animation_state = spin` from a helper behavior.
 3. Configure collision layer to overlap with player.
 4. Done.
 

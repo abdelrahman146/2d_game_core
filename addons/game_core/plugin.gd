@@ -36,6 +36,7 @@ const CUSTOM_TYPES := [
 	{&"name": "GCFacing", &"base": "Node", &"script": "res://addons/game_core/behaviors/presentation/gc_facing.gd"},
 	{&"name": "GCFlashOnHit", &"base": "Node", &"script": "res://addons/game_core/behaviors/presentation/gc_flash_on_hit.gd"},
 	{&"name": "GCAnimationBehavior", &"base": "Node", &"script": "res://addons/game_core/behaviors/presentation/gc_animation_behavior.gd"},
+	{&"name": "GCAnimatedSpriteBehavior", &"base": "Node", &"script": "res://addons/game_core/behaviors/presentation/gc_animated_sprite_behavior.gd"},
 	# Screens
 	{&"name": "GCScreenRouter", &"base": "CanvasLayer", &"script": "res://addons/game_core/screens/gc_screen_router.gd"},
 	{&"name": "GCScreen", &"base": "Node", &"script": "res://addons/game_core/screens/gc_screen.gd"},
@@ -61,6 +62,7 @@ const CUSTOM_RESOURCES := [
 	{&"name": "GCChunkSelector", &"base": "Resource", &"script": "res://addons/game_core/world/gc_chunk_selector.gd"},
 	{&"name": "GCStatsData", &"base": "Resource", &"script": "res://addons/game_core/resources/gc_stats_data.gd"},
 	{&"name": "GCLootTable", &"base": "Resource", &"script": "res://addons/game_core/resources/gc_loot_table.gd"},
+	{&"name": "GCAnimationBinding", &"base": "Resource", &"script": "res://addons/game_core/resources/gc_animation_binding.gd"},
 	{&"name": "GCLevelData", &"base": "Resource", &"script": "res://addons/game_core/resources/gc_level_data.gd"},
 	{&"name": "GCChunkData", &"base": "Resource", &"script": "res://addons/game_core/resources/gc_chunk_data.gd"},
 ]

@@ -90,6 +90,7 @@ This starts the game context, service registry, and screen router for you.
 
 - Create actor scenes using `GCCharacterHost2D`, `GCRigidHost2D`, `GCStaticHost2D`, or `GCAreaHost2D` as root nodes.
 - Add behavior nodes as children to compose functionality.
+- For presentation, have game-specific behaviors write `animation_state` / `animation_trigger` into `local_state`, then use `GCAnimationBehavior` with `AnimationPlayer` or `GCAnimatedSpriteBehavior` with `AnimatedSprite2D` to render them.
 - Configure everything in the inspector — no glue scripts needed for common patterns.
 - Define screens and navigate by id through the screen router.
 - Pick a world source (single scene, level-based, or chunk) and assign it to the world controller.
