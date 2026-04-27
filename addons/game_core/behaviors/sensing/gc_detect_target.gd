@@ -1,10 +1,16 @@
 extends "res://addons/game_core/actors/gc_behavior.gd"
 class_name GCDetectTarget
-## Detects a target (e.g., player) via Area2D overlap or distance.
+## Detects a target via Area2D overlap or distance check.
 ## Writes "target_node" and "target_detected" to local_state.
+##
+## Area mode (use_area = true): the detection Area2D's collision_mask filters
+## which physics layers count as targets. No group lookup is used.
+## Distance mode (use_area = false): scans the scene-tree group `target_group`
+## for the nearest Node2D within `detection_radius`. Groups are used here
+## because this is a logical actor lookup, not collision routing.
 
 @export var detection_area_path: NodePath
-@export var detect_group: StringName = &"player"
+@export var target_group: StringName = &"player"  ## Used only in distance mode
 @export var detection_radius := 150.0
 @export var use_area := true  ## If false, uses distance check instead
 
@@ -40,16 +46,14 @@ func on_physics(host: Node, _delta: float) -> void:
 
 
 func _on_body_entered(body: Node2D, host: Node) -> void:
-	if body.is_in_group(detect_group):
-		host.local_state[&"target_node"] = body
-		host.local_state[&"target_detected"] = true
+	host.local_state[&"target_node"] = body
+	host.local_state[&"target_detected"] = true
 
 
 func _on_body_exited(body: Node2D, host: Node) -> void:
-	if body.is_in_group(detect_group):
-		if host.local_state.get(&"target_node") == body:
-			host.local_state[&"target_node"] = null
-			host.local_state[&"target_detected"] = false
+	if host.local_state.get(&"target_node") == body:
+		host.local_state[&"target_node"] = null
+		host.local_state[&"target_detected"] = false
 
 
 func _get_area(host: Node) -> Area2D:
@@ -64,7 +68,7 @@ func _get_area(host: Node) -> Area2D:
 
 
 func _find_nearest_in_group(from: Node2D) -> Node2D:
-	var nodes := from.get_tree().get_nodes_in_group(detect_group)
+	var nodes := from.get_tree().get_nodes_in_group(target_group)
 	var nearest: Node2D = null
 	var nearest_dist := INF
 	for node in nodes:

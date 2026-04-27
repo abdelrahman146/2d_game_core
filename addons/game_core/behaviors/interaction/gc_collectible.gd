@@ -1,11 +1,11 @@
 extends "res://addons/game_core/actors/gc_behavior.gd"
 class_name GCCollectible
-## Makes the host collectible. When overlapped by a body in the collect_group,
-## emits collected signal and optionally destroys the host.
+## Makes the host collectible. Filtering is done by the host (or pickup)
+## Area2D's collision_mask — set it to only see the collector layer.
+## Emits `collected` and optionally destroys the host.
 
 signal collected(collector: Node, reward_data: Dictionary)
 
-@export var collect_group: StringName = &"player"
 @export var reward_type: StringName = &"coin"
 @export var reward_amount := 1
 @export var destroy_on_collect := true
@@ -30,8 +30,6 @@ func on_host_ready(host: Node) -> void:
 
 func _on_body_entered(body: Node, host: Node) -> void:
 	if _collected:
-		return
-	if not body.is_in_group(collect_group):
 		return
 	_collected = true
 	var data := {&"type": reward_type, &"amount": reward_amount}

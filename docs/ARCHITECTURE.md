@@ -257,7 +257,7 @@ The host calls each behavior component's hooks every frame. Behaviors read/write
 
 You build the enemy by adding/removing behavior nodes in the scene tree. No glue script needed.
 
-### Local State
+### Local State (the actor blackboard)
 
 Each host has a simple dictionary (`host.local_state`) that behaviors read and write:
 
@@ -272,7 +272,71 @@ var speed = host.local_state.get("speed", 0.0)
 host.velocity = dir * speed
 ```
 
-This is how behaviors communicate without knowing about each other.
+This is how behaviors communicate **inside one actor** without knowing about each other. Phases (`SENSE → DECIDE → ACT → PRESENT`) make the read/write order predictable. Don't replace it with signals — signals between siblings inside the same actor are slower, harder to order, and harder to debug than a shared dictionary.
+
+---
+
+## Communication Rules
+
+The core follows three layered communication patterns. Use the right one for each scope.
+
+### 1. Inside one actor: blackboard (`host.local_state`)
+
+Behaviors on the same host coordinate through the host's `local_state` dictionary, ordered by phase. SENSE behaviors write, DECIDE behaviors choose, ACT behaviors execute, PRESENT behaviors render.
+
+### 2. Between nodes that know each other: Signal Up, Call Down
+
+- **Signal Up.** A child should never know its parent. It exposes its own typed signals (`died`, `collected`, `interacted`); whoever owns the child connects to them.
+- **Call Down.** A parent owns its children and can call methods on them directly (`@onready var sensor = $Sensor`).
+- **No bubbling.** Don't re-emit a child's signal from the parent just to reach a grandparent. Either connect the grandparent directly to the child, or use the bus (below).
+- **Groups for one-to-many.** Use `get_tree().call_group(group, method)` when you need to call the same method on many nodes at once.
+
+### 3. Across unrelated systems: a per-game `GCSignalBus`
+
+For cross-cutting events with no clear owner (`achievement_unlocked`, `score_changed`, `wave_started`), the core ships an empty base class `GCSignalBus`. Each game subclasses it, declares its own typed signals, and registers it as an autoload:
+
+```gdscript
+# res://autoloads/signal_bus.gd
+extends GCSignalBus
+class_name SignalBus
+
+signal player_died(player: Node)
+signal score_changed(value: int)
+```
+
+Then anywhere:
+
+```gdscript
+SignalBus.player_died.emit(self)
+SignalBus.score_changed.connect(_on_score_changed)
+```
+
+The core does **not** autoload a bus and does **not** declare bus signals. The bus is game-owned. Use it sparingly — only for events with no clear emitter/listener relationship.
+
+---
+
+## Groups, Tags, and Collision Layers
+
+The core uses **Godot-native scene-tree groups** for tagging and category lookups, and **collision layers + masks** for physics filtering. There is no custom `entity_tags` field.
+
+### Use collision layers + masks for collisions
+
+- **Collision layer** = what this object *is*.
+- **Collision mask** = what this object *looks for*.
+- Built-in behaviors that listen on an Area2D (`GCDamage`, `GCCollectible`, `GCInteractable`, `GCDetectTarget` in area mode) trust the area's `collision_mask` for filtering. They do not check groups for collision routing.
+- Define your project's layer names in **Project Settings → Layer Names → 2D Physics** so the inspector is self-documenting.
+- Performance tips: minimize collision pairs (e.g., enemies usually shouldn't mask each other), enable `Continuous CD` (`continuous_cd = Cast Ray`) on small fast bodies like bullets, and pair with `GCVisibilityCull` to disable off-screen collision shapes.
+
+### Use scene-tree groups for tagging and broad lookups
+
+- Add a host to a group via the **Inspector → Node → Groups** tab or `add_to_group(&"enemy")`.
+- Query with `is_in_group(...)`, `get_tree().get_nodes_in_group(...)`, or `call_group(...)`.
+- Define group name constants in your **game** (e.g., `Groups.ENEMIES`, `Groups.PERSIST`) to avoid magic strings. The core does not own gameplay group names.
+- Don't use groups for collision filtering — that's what masks are for.
+
+### `GCDetectTarget` distance mode
+
+Distance-based detection is a logical actor lookup, not a physics collision, so it scans the configurable scene-tree group `target_group`. Area mode uses the Area2D's mask.
 
 ---
 
@@ -355,6 +419,8 @@ A starter set of behaviors that ship with the core. You can use them as-is or as
 - **GCDestroyOnHitBehavior** — Remove self after taking damage or on signal.
 - **GCAnimationBehavior** — Play the current `animation_state` / `animation_trigger` contract on an `AnimationPlayer`.
 - **GCAnimatedSpriteBehavior** — Play the same `animation_state` / `animation_trigger` contract on an `AnimatedSprite2D`.
+- **GCAnimationTreeBehavior** — Drive an `AnimationTree` state machine from the same contract. Use this for blends and complex transitions.
+- **GCVisibilityCull** — Pause behaviors / animation / collision while the host is off-screen, via `VisibleOnScreenEnabler2D`. Big perf win for arcade and bullet-hell.
 
 ### Physics & Constraints
 

@@ -135,15 +135,19 @@ func test_local_state_accessible_from_behaviors() -> void:
 	assert_eq(host.local_state[&"test_key"], 42)
 
 
-func test_entity_tags_and_has_tag() -> void:
+func test_native_groups_used_for_categorization() -> void:
+	# entity_tags / has_tag have been removed; hosts use Godot's native groups.
 	var host := GCCharacterHost2D.new()
-	host.entity_tags = PackedStringArray(["enemy", "flying"])
 	add_child_autoqfree(host)
 	host.set_process(false)
 	host.set_physics_process(false)
-	assert_true(host.has_tag(&"enemy"))
-	assert_true(host.has_tag(&"flying"))
-	assert_false(host.has_tag(&"player"))
+	host.add_to_group(&"enemy")
+	host.add_to_group(&"flying")
+	assert_true(host.is_in_group(&"enemy"))
+	assert_true(host.is_in_group(&"flying"))
+	assert_false(host.is_in_group(&"player"))
+	var enemies := host.get_tree().get_nodes_in_group(&"enemy")
+	assert_true(enemies.has(host))
 
 
 func test_get_behavior_finds_by_script() -> void:

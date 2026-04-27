@@ -5,8 +5,10 @@ class_name GCRigidHost2D
 
 const _Behavior = preload("res://addons/game_core/actors/gc_behavior.gd")
 
-@export var entity_tags: PackedStringArray = []
-@export var stats: Resource  ## Optional GCStatsData resource
+## Optional GCStatsData resource. Use Godot's native scene-tree groups
+## (Inspector → Node → Groups, or `add_to_group(...)`) for tagging and
+## category lookups
+@export var stats: Resource
 
 var local_state: Dictionary = {}
 var _behaviors: Array[_Behavior] = []
@@ -40,10 +42,6 @@ func get_behavior(type: Script) -> _Behavior:
 		if b.get_script() == type:
 			return b
 	return null
-
-
-func has_tag(tag: StringName) -> bool:
-	return entity_tags.has(tag)
 
 
 func find_child_of_type(type: Variant) -> Node:

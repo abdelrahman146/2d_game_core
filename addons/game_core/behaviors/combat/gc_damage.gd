@@ -1,14 +1,16 @@
 extends "res://addons/game_core/actors/gc_behavior.gd"
 class_name GCDamage
 ## Deals damage on contact via Area2D overlap.
-## Configure which groups or tags to damage.
+##
+## Filtering is done by the Area2D's collision_mask — set the mask in the
+## inspector to only see physics layers that should take damage. Targets
+## must have a GCHealth child behavior to actually take damage.
 
 const _Health = preload("res://addons/game_core/behaviors/combat/gc_health.gd")
 
 signal damage_dealt(target: Node, amount: int)
 
 @export var damage := 1
-@export var damage_group: StringName = &"damageable"
 @export var damage_area_path: NodePath
 @export var one_shot := false  ## If true, only damages once then disables
 
@@ -41,8 +43,6 @@ func _on_area_entered(area: Area2D, _host: Node) -> void:
 
 
 func _try_damage(target: Node) -> void:
-	if not target.is_in_group(damage_group):
-		return
 	var health_behavior: _Health = _find_health(target)
 	if health_behavior:
 		health_behavior.take_damage(target, damage, get_parent())

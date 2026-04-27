@@ -7,6 +7,7 @@ const CUSTOM_TYPES := [
 	# Core
 	{&"name": "GCBootstrap", &"base": "Node", &"script": "res://addons/game_core/core/gc_bootstrap.gd"},
 	{&"name": "GCHitStop", &"base": "Node", &"script": "res://addons/game_core/core/gc_hit_stop.gd"},
+	{&"name": "GCSignalBus", &"base": "Node", &"script": "res://addons/game_core/core/gc_signal_bus.gd"},
 	# Actors
 	{&"name": "GCCharacterHost2D", &"base": "CharacterBody2D", &"script": "res://addons/game_core/actors/gc_character_host.gd"},
 	{&"name": "GCRigidHost2D", &"base": "RigidBody2D", &"script": "res://addons/game_core/actors/gc_rigid_host.gd"},
@@ -37,6 +38,8 @@ const CUSTOM_TYPES := [
 	{&"name": "GCFlashOnHit", &"base": "Node", &"script": "res://addons/game_core/behaviors/presentation/gc_flash_on_hit.gd"},
 	{&"name": "GCAnimationBehavior", &"base": "Node", &"script": "res://addons/game_core/behaviors/presentation/gc_animation_behavior.gd"},
 	{&"name": "GCAnimatedSpriteBehavior", &"base": "Node", &"script": "res://addons/game_core/behaviors/presentation/gc_animated_sprite_behavior.gd"},
+	{&"name": "GCAnimationTreeBehavior", &"base": "Node", &"script": "res://addons/game_core/behaviors/presentation/gc_animation_tree_behavior.gd"},
+	{&"name": "GCVisibilityCull", &"base": "Node", &"script": "res://addons/game_core/behaviors/presentation/gc_visibility_cull.gd"},
 	# Screens
 	{&"name": "GCScreenRouter", &"base": "CanvasLayer", &"script": "res://addons/game_core/screens/gc_screen_router.gd"},
 	{&"name": "GCScreen", &"base": "Node", &"script": "res://addons/game_core/screens/gc_screen.gd"},

@@ -1,13 +1,14 @@
 extends "res://addons/game_core/actors/gc_behavior.gd"
 class_name GCInteractable
 ## Makes the host interactable (press a button near it to trigger).
-## Emits "interacted" signal when a body in interact_group presses the action.
+## Filtering is done by the interact Area2D's collision_mask — set it to
+## only see the layer of bodies that may interact (typically the player).
+## Emits `interacted` when an in-range body presses the action.
 
 signal interacted(interactor: Node)
 signal interact_available(interactor: Node)
 signal interact_unavailable
 
-@export var interact_group: StringName = &"player"
 @export var interact_action: StringName = &"interact"
 @export var interact_area_path: NodePath
 @export var one_time := false
@@ -39,9 +40,8 @@ func on_process(_host: Node, _delta: float) -> void:
 
 
 func _on_body_entered(body: Node) -> void:
-	if body.is_in_group(interact_group):
-		_interactor = body
-		interact_available.emit(body)
+	_interactor = body
+	interact_available.emit(body)
 
 
 func _on_body_exited(body: Node) -> void:
