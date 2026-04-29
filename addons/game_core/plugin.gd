@@ -16,6 +16,7 @@ const CUSTOM_TYPES := [
 	# Behaviors
 	{&"name": "GCBehavior", &"base": "Node", &"script": "res://addons/game_core/actors/gc_behavior.gd"},
 	{&"name": "GCGravity", &"base": "Node", &"script": "res://addons/game_core/behaviors/movement/gc_gravity.gd"},
+	{&"name": "GCLinearMotion", &"base": "Node", &"script": "res://addons/game_core/behaviors/movement/gc_linear_motion.gd"},
 	{&"name": "GCSimpleMovement", &"base": "Node", &"script": "res://addons/game_core/behaviors/movement/gc_simple_movement.gd"},
 	{&"name": "GCPatrolBehavior", &"base": "Node", &"script": "res://addons/game_core/behaviors/movement/gc_patrol_behavior.gd"},
 	{&"name": "GCFollowTarget", &"base": "Node", &"script": "res://addons/game_core/behaviors/movement/gc_follow_target.gd"},
@@ -28,6 +29,7 @@ const CUSTOM_TYPES := [
 	{&"name": "GCLineSight", &"base": "Node", &"script": "res://addons/game_core/behaviors/sensing/gc_line_sight.gd"},
 	{&"name": "GCHealth", &"base": "Node", &"script": "res://addons/game_core/behaviors/combat/gc_health.gd"},
 	{&"name": "GCDamage", &"base": "Node", &"script": "res://addons/game_core/behaviors/combat/gc_damage.gd"},
+	{&"name": "GCHazardCycle", &"base": "Node", &"script": "res://addons/game_core/behaviors/combat/gc_hazard_cycle.gd"},
 	{&"name": "GCShoot", &"base": "Node", &"script": "res://addons/game_core/behaviors/combat/gc_shoot.gd"},
 	{&"name": "GCChargedBeam", &"base": "Node", &"script": "res://addons/game_core/behaviors/combat/gc_charged_beam.gd"},
 	{&"name": "GCDrop", &"base": "Node", &"script": "res://addons/game_core/behaviors/combat/gc_drop.gd"},
